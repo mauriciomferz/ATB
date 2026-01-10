@@ -1,0 +1,21 @@
+{{- if .Values.broker.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-broker
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "atb.labels" . | indent 4 }}
+spec:
+  type: {{ .Values.broker.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: broker
+  ports:
+    - name: mtls
+      port: {{ .Values.broker.service.mtlsPort }}
+      targetPort: mtls
+    - name: http
+      port: {{ .Values.broker.service.httpPort }}
+      targetPort: http
+{{- end }}

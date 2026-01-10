@@ -1,0 +1,66 @@
+namespace: atb
+
+imagePullSecrets: []
+
+broker:
+  enabled: true
+  name: broker
+  image:
+    repository: ghcr.io/mauriciomferz/atb-broker
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  service:
+    type: ClusterIP
+    mtlsPort: 8443
+    httpPort: 8080
+  env:
+    UPSTREAM_URL: "http://upstream.default.svc.cluster.local:9000"
+    OPA_DECISION_URL: "http://{{ .Release.Name }}-opa.{{ .Values.namespace }}.svc.cluster.local:8181/v1/data/atb/poa/decision"
+    POA_MAX_TTL_SECONDS: "300"
+    # PoA verification: for production, prefer POA_JWKS_URL + JWKS cache in broker.
+    POA_VERIFY_PUBKEY_PEM: ""
+  resources: {}
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+
+pep:
+  enabled: false
+
+opa:
+  enabled: true
+  name: opa
+  image:
+    repository: openpolicyagent/opa
+    tag: "0.66.0"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 8181
+  resources: {}
+
+policy:
+  regoConfigMapName: atb-opa-policy
+  regoKey: poa.rego
+
+observability:
+  prometheus:
+    enabled: false
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: 10s
+  otel:
+    enabled: false
+    endpoint: "http://otel-collector.monitoring.svc.cluster.local:4318"
+    sampler: "parentbased_traceidratio"
+    samplerArg: "0.1"
+
+csi:
+  enabled: false
+  driver: "csi.spiffe.io"
+  mountPath: "/spire-agent-socket"
+  socketFile: "workload-api.sock"

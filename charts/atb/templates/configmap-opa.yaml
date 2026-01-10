@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.policy.regoConfigMapName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "atb.labels" . | indent 4 }}
+data:
+  {{ .Values.policy.regoKey }}: |
+{{- .Files.Get "../../opa/policy/poa.rego" | nindent 4 }}

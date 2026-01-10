@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "atb.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  restartPolicy: Never
+  containers:
+    - name: smoke
+      image: curlimages/curl:8.6.0
+      command:
+        - sh
+        - -ec
+        - |
+          echo "Checking broker /health";
+          curl -fsS http://{{ .Release.Name }}-broker:{{ .Values.broker.service.httpPort }}/health;
+          echo "Checking OPA /health";
+          curl -fsS http://{{ .Release.Name }}-opa:{{ .Values.opa.service.port }}/health;
+          {{- if .Values.csi.enabled }}
+          echo "Checking SPIFFE CSI mount";
+          test -d {{ .Values.csi.mountPath }};
+          {{- end }}
+          echo "OK";

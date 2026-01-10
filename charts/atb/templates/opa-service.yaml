@@ -1,0 +1,18 @@
+{{- if .Values.opa.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-opa
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "atb.labels" . | indent 4 }}
+spec:
+  type: {{ .Values.opa.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: opa
+  ports:
+    - name: http
+      port: {{ .Values.opa.service.port }}
+      targetPort: http
+{{- end }}

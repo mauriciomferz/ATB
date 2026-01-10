@@ -1,0 +1,29 @@
+namespace: atb-staging
+
+broker:
+  replicas: 1
+  image:
+    tag: "0.1.0-staging"
+  env:
+    UPSTREAM_URL: "http://upstream.atb-staging.svc.cluster.local:9000"
+
+opa:
+  replicas: 1
+
+observability:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      scrapeTimeout: 10s
+  otel:
+    enabled: true
+    endpoint: "http://otel-collector.monitoring.svc.cluster.local:4318"
+    sampler: "always_on"
+    samplerArg: "1.0"
+
+csi:
+  enabled: true
+  mountPath: "/spire-agent-socket"
+  socketFile: "workload-api.sock"

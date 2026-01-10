@@ -1,0 +1,6 @@
+apiVersion: v2
+name: atb
+description: Agent Tool Broker (ATB) - Broker Gateway + OPA (skeleton)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

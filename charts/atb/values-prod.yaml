@@ -1,0 +1,29 @@
+namespace: atb
+
+broker:
+  replicas: 3
+  image:
+    tag: "0.1.0"
+  env:
+    UPSTREAM_URL: "http://upstream.atb.svc.cluster.local:9000"
+
+opa:
+  replicas: 2
+
+observability:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      scrapeTimeout: 10s
+  otel:
+    enabled: true
+    endpoint: "http://otel-collector.monitoring.svc.cluster.local:4318"
+    sampler: "parentbased_traceidratio"
+    samplerArg: "0.1"
+
+csi:
+  enabled: true
+  mountPath: "/spire-agent-socket"
+  socketFile: "workload-api.sock"

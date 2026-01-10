@@ -1,0 +1,47 @@
+{{- if .Values.opa.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-opa
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "atb.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.opa.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: opa
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/name: opa
+    spec:
+      containers:
+        - name: opa
+          image: {{ .Values.opa.image.repository }}:{{ .Values.opa.image.tag }}
+          imagePullPolicy: {{ .Values.opa.image.pullPolicy }}
+          args:
+            - run
+            - --server
+            - --addr=0.0.0.0:8181
+            - /policy/{{ .Values.policy.regoKey }}
+          ports:
+            - name: http
+              containerPort: 8181
+          volumeMounts:
+            - name: policy
+              mountPath: /policy
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: policy
+          configMap:
+            name: {{ .Values.policy.regoConfigMapName }}
+{{- end }}
