@@ -87,15 +87,17 @@ agentauth:
     CHALLENGE_TTL_SECONDS: "300"
     # Optional: require this header for approvals (simulates MFA/approval gateway)
     APPROVAL_SHARED_SECRET: ""
-    # Optional: Ed25519 signing key (PKCS8 PEM). Leave empty for ephemeral dev key.
-    POA_SIGNING_ED25519_PRIVKEY_PEM: ""
+    # REMOVED: POA_SIGNING_ED25519_PRIVKEY_PEM must NOT be supplied in values.yaml.
+    # Always provide the signing key via agentauth.secrets.signingKey (Kubernetes Secret).
   secrets:
     # If set, these override the corresponding plaintext env vars above.
     approvalSharedSecret:
       name: ""
       key: "approval_shared_secret"
+    # REQUIRED when agentauth.enabled=true: the Ed25519 signing key (PKCS8 PEM) must be
+    # sourced from a Kubernetes Secret.
     signingKey:
-      name: ""
+      name: ""  # <-- set this to your Secret name
       key: "ed25519_privkey_pem"
   resources: {}
 

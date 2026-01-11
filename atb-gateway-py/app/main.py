@@ -10,9 +10,21 @@ from fastapi import FastAPI, Header, HTTPException, Request
 app = FastAPI(title="ATB Broker Gateway (Python) - Skeleton")
 
 UPSTREAM_URL = os.environ.get("UPSTREAM_URL", "http://localhost:9000")
-OPA_DECISION_URL = os.environ.get("OPA_DECISION_URL", "http://localhost:8181/v1/data/atb/poa/decision")
+OPA_DECISION_URL = os.environ.get(
+    "OPA_DECISION_URL", "http://localhost:8181/v1/data/atb/poa/decision"
+)
 POA_VERIFY_PUBKEY_PEM = os.environ.get("POA_VERIFY_PUBKEY_PEM", "")
 POA_MAX_TTL_SECONDS = int(os.environ.get("POA_MAX_TTL_SECONDS", "300"))
+ALLOW_UNMANDATED_LOW_RISK = os.environ.get(
+    "ALLOW_UNMANDATED_LOW_RISK", "false"
+).strip().lower() in {
+    "1",
+    "true",
+    "t",
+    "yes",
+    "y",
+    "on",
+}
 
 
 @app.get("/health", include_in_schema=False)
@@ -93,7 +105,9 @@ def extract_agent_spiffe_id(
 
 def verify_poa_jwt(token: str) -> Dict[str, Any]:
     if not POA_VERIFY_PUBKEY_PEM.strip():
-        raise HTTPException(status_code=500, detail="POA_VERIFY_PUBKEY_PEM not configured")
+        raise HTTPException(
+            status_code=500, detail="POA_VERIFY_PUBKEY_PEM not configured"
+        )
 
     # Accept RS256/EdDSA (supply the matching public key in PEM).
     try:
@@ -109,9 +123,14 @@ def verify_poa_jwt(token: str) -> Dict[str, Any]:
 
     ttl = int(claims["exp"]) - int(claims["iat"])
     if ttl <= 0 or ttl > 900:
-        raise HTTPException(status_code=403, detail="PoA TTL exceeds 15-minute hard cap")
+        raise HTTPException(
+            status_code=403, detail="PoA TTL exceeds 15-minute hard cap"
+        )
     if ttl > POA_MAX_TTL_SECONDS:
-        raise HTTPException(status_code=403, detail=f"PoA TTL exceeds configured max ({POA_MAX_TTL_SECONDS}s)")
+        raise HTTPException(
+            status_code=403,
+            detail=f"PoA TTL exceeds configured max ({POA_MAX_TTL_SECONDS}s)",
+        )
     if int(time.time()) > int(claims["exp"]):
         raise HTTPException(status_code=403, detail="PoA expired")
 
@@ -120,7 +139,13 @@ def verify_poa_jwt(token: str) -> Dict[str, Any]:
 
 def semantic_guardrails(params: Dict[str, Any]) -> Tuple[bool, str]:
     # Placeholder for NeMo Guardrails integration.
-    markers = ["ignore previous", "disable safety", "exfiltrate", "curl http", "drop table"]
+    markers = [
+        "ignore previous",
+        "disable safety",
+        "exfiltrate",
+        "curl http",
+        "drop table",
+    ]
     for v in params.values():
         if isinstance(v, str):
             low = v.lower()
@@ -132,7 +157,9 @@ def semantic_guardrails(params: Dict[str, Any]) -> Tuple[bool, str]:
 def opa_decide(payload: Dict[str, Any]) -> Tuple[bool, str]:
     r = requests.post(OPA_DECISION_URL, json={"input": payload}, timeout=1.5)
     if r.status_code // 100 != 2:
-        raise HTTPException(status_code=500, detail=f"OPA error: {r.status_code} {r.text}")
+        raise HTTPException(
+            status_code=500, detail=f"OPA error: {r.status_code} {r.text}"
+        )
     data = r.json().get("result")
     if isinstance(data, bool):
         return data, ""
@@ -141,12 +168,18 @@ def opa_decide(payload: Dict[str, Any]) -> Tuple[bool, str]:
     raise HTTPException(status_code=500, detail="OPA returned unexpected result")
 
 
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
+@app.api_route(
+    "/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    include_in_schema=False,
+)
 async def broker(
     request: Request,
     path: str,
     authorization: Optional[str] = Header(default=None),
     x_poa_token: Optional[str] = Header(default=None),
+    x_atb_action: Optional[str] = Header(default=None),
+    x_action: Optional[str] = Header(default=None),
     x_request_id: Optional[str] = Header(default=None),
     x_spiffe_id: Optional[str] = Header(default=None),
 ):
@@ -154,18 +187,130 @@ async def broker(
 
     req_path = "/" + path
 
+    action_header = (x_atb_action or "").strip() or (x_action or "").strip()
+    action_for_logs = action_header or f"{request.method} {req_path}"
+
     token = ""
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
     if not token and x_poa_token:
         token = x_poa_token.strip()
     if not token:
+        if not ALLOW_UNMANDATED_LOW_RISK:
+            audit(
+                audit_event(
+                    request_id=x_request_id,
+                    poa_jti=None,
+                    agent_identity=agent_spiffe,
+                    action=action_for_logs,
+                    constraints=None,
+                    decision="deny",
+                    reason="missing_poa",
+                    method=request.method,
+                    path=req_path,
+                    target_service=UPSTREAM_URL,
+                )
+            )
+            raise HTTPException(status_code=401, detail="Missing PoA")
+
+        body = await request.body()
+        params: Dict[str, Any] = {}
+        if body:
+            try:
+                params = json.loads(body.decode("utf-8"))
+            except Exception:
+                params = {}
+
+        ok, why = semantic_guardrails(params)
+        if not ok:
+            audit(
+                audit_event(
+                    request_id=x_request_id,
+                    poa_jti=None,
+                    agent_identity=agent_spiffe,
+                    action=action_for_logs,
+                    constraints=None,
+                    decision="deny",
+                    reason=why,
+                    method=request.method,
+                    path=req_path,
+                    target_service=UPSTREAM_URL,
+                )
+            )
+            raise HTTPException(status_code=403, detail="Blocked by semantic firewall")
+
+        opa_input = {
+            "agent": {"spiffe_id": agent_spiffe},
+            "poa": {},
+            "request": {
+                "action": action_header,
+                "method": request.method,
+                "path": req_path,
+                "params": params,
+            },
+            "policy": {"max_ttl_seconds": POA_MAX_TTL_SECONDS},
+        }
+
+        allow, reason = opa_decide(opa_input)
+        if not allow:
+            audit(
+                audit_event(
+                    request_id=x_request_id,
+                    poa_jti=None,
+                    agent_identity=agent_spiffe,
+                    action=action_for_logs,
+                    constraints=None,
+                    decision="deny",
+                    reason=reason or "poa_required_for_action",
+                    method=request.method,
+                    path=req_path,
+                    target_service=UPSTREAM_URL,
+                )
+            )
+            raise HTTPException(status_code=401, detail="PoA required")
+
         audit(
             audit_event(
                 request_id=x_request_id,
                 poa_jti=None,
                 agent_identity=agent_spiffe,
-                action=None,
+                action=action_for_logs,
+                constraints=None,
+                decision="allow",
+                reason=reason or "allow_low_risk_without_poa",
+                method=request.method,
+                path=req_path,
+                target_service=UPSTREAM_URL,
+            )
+        )
+
+        upstream_url = UPSTREAM_URL.rstrip("/") + "/" + path
+        headers = dict(request.headers)
+        headers.pop("authorization", None)
+        headers.pop("x-poa-token", None)
+        headers.pop("x-spiffe-id", None)
+        if x_request_id:
+            headers["x-request-id"] = x_request_id
+
+        try:
+            r = requests.request(
+                method=request.method,
+                url=upstream_url,
+                headers=headers,
+                data=body,
+                timeout=5.0,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Upstream error: {e}")
+
+        return {"upstream_status": r.status_code, "upstream_body": r.text}
+
+        audit(
+            audit_event(
+                request_id=x_request_id,
+                poa_jti=None,
+                agent_identity=agent_spiffe,
+                action=action_for_logs,
                 constraints=None,
                 decision="deny",
                 reason="missing_poa",
@@ -177,6 +322,22 @@ async def broker(
         raise HTTPException(status_code=401, detail="Missing PoA")
 
     claims = verify_poa_jwt(token)
+    if action_header and str(claims.get("act")) != action_header:
+        audit(
+            audit_event(
+                request_id=x_request_id,
+                poa_jti=str(claims.get("jti")),
+                agent_identity=agent_spiffe,
+                action=str(claims.get("act")),
+                constraints=claims.get("con"),
+                decision="deny",
+                reason="action_mismatch",
+                method=request.method,
+                path=req_path,
+                target_service=UPSTREAM_URL,
+            )
+        )
+        raise HTTPException(status_code=403, detail="PoA action mismatch")
     if claims.get("sub") != agent_spiffe:
         audit(
             audit_event(
@@ -231,7 +392,12 @@ async def broker(
             "exp": claims.get("exp"),
             "jti": claims.get("jti"),
         },
-        "request": {"method": request.method, "path": "/" + path, "params": params},
+        "request": {
+            "action": action_header,
+            "method": request.method,
+            "path": "/" + path,
+            "params": params,
+        },
         "policy": {"max_ttl_seconds": POA_MAX_TTL_SECONDS},
     }
 

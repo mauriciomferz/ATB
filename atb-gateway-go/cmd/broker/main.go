@@ -167,6 +167,21 @@ func envInt64(name string, def int64) int64 {
 	return out
 }
 
+func envBool(name string, def bool) bool {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return def
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "t", "yes", "y", "on":
+		return true
+	case "0", "false", "f", "no", "n", "off":
+		return false
+	default:
+		return def
+	}
+}
+
 func peerSPIFFEIDFromVerifiedCert(r *http.Request) (string, error) {
 	if r.TLS == nil {
 		return "", errors.New("missing TLS state")
@@ -225,6 +240,53 @@ type jwksCache struct {
 	mu        sync.RWMutex
 	keysByKID map[string]interface{}
 	lastFetch time.Time
+}
+
+type replayCache struct {
+	mu         sync.Mutex
+	seenUntil  map[string]time.Time
+	maxEntries int
+}
+
+func newReplayCache(maxEntries int) *replayCache {
+	if maxEntries <= 0 {
+		maxEntries = 10000
+	}
+	return &replayCache{seenUntil: map[string]time.Time{}, maxEntries: maxEntries}
+}
+
+func (c *replayCache) markIfFresh(jti string, until time.Time, now time.Time) bool {
+	if strings.TrimSpace(jti) == "" {
+		return true
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Opportunistic cleanup.
+	for k, exp := range c.seenUntil {
+		if !exp.After(now) {
+			delete(c.seenUntil, k)
+		}
+	}
+
+	if exp, ok := c.seenUntil[jti]; ok && exp.After(now) {
+		return false
+	}
+
+	c.seenUntil[jti] = until
+
+	// Cap memory growth.
+	if len(c.seenUntil) > c.maxEntries {
+		for k := range c.seenUntil {
+			delete(c.seenUntil, k)
+			if len(c.seenUntil) <= c.maxEntries {
+				break
+			}
+		}
+	}
+
+	return true
 }
 
 func newJWKSCache(url string, httpClient *http.Client, cacheTTL time.Duration) *jwksCache {
@@ -436,6 +498,10 @@ func main() {
 	}
 
 	maxTTLSec := envInt64("POA_MAX_TTL_SECONDS", 300)
+	allowUnmandatedLowRisk := envBool("ALLOW_UNMANDATED_LOW_RISK", false)
+	poaSingleUse := envBool("POA_SINGLE_USE", false)
+	poaReplayCacheMax := int(envInt64("POA_REPLAY_CACHE_MAX", 10000))
+	replay := newReplayCache(poaReplayCacheMax)
 
 	targetURL := mustParseURL(upstream)
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
@@ -456,6 +522,15 @@ func main() {
 		start := time.Now().UTC()
 		reqID := r.Header.Get("X-Request-ID")
 
+		actionHeader := strings.TrimSpace(r.Header.Get("X-ATB-Action"))
+		if actionHeader == "" {
+			actionHeader = strings.TrimSpace(r.Header.Get("X-Action"))
+		}
+		actionForLogs := actionHeader
+		if actionForLogs == "" {
+			actionForLogs = strings.TrimSpace(r.Method + " " + r.URL.Path)
+		}
+
 		agentSPIFFE, err := peerSPIFFEIDFromVerifiedCert(r)
 		if err != nil {
 			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
@@ -470,21 +545,70 @@ func main() {
 			return
 		}
 
+		bodyBytes, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+		params := map[string]interface{}{}
+		if len(bodyBytes) > 0 {
+			_ = json.Unmarshal(bodyBytes, &params)
+		}
+
+		if ok, why := semanticGuardrails(params); !ok {
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: why, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
+			http.Error(w, "blocked by semantic firewall", http.StatusForbidden)
+			return
+		}
+
 		poaToken := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 		if poaToken == "" {
 			poaToken = strings.TrimSpace(r.Header.Get("X-PoA-Token"))
 		}
 		if poaToken == "" {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "missing_poa", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
-			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
-			http.Error(w, "missing PoA token", http.StatusUnauthorized)
+			if !allowUnmandatedLowRisk {
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: "missing_poa", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
+				http.Error(w, "missing PoA token", http.StatusUnauthorized)
+				return
+			}
+
+			input := OPAInput{
+				Agent: map[string]interface{}{"spiffe_id": agentSPIFFE},
+				PoA:   map[string]interface{}{},
+				Request: map[string]interface{}{
+					"action": actionHeader,
+					"method": r.Method,
+					"path":   r.URL.Path,
+					"params": params,
+				},
+				Policy: map[string]interface{}{"max_ttl_seconds": maxTTLSec},
+			}
+
+			allow, reason, err := opa.Decide(r.Context(), input)
+			if err != nil {
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "error", Reason: "opa_error:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				brokerRequestsTotal.WithLabelValues("error", actionForLogs).Inc()
+				http.Error(w, "policy evaluation error", http.StatusInternalServerError)
+				return
+			}
+			if !allow {
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
+				http.Error(w, "PoA required", http.StatusUnauthorized)
+				return
+			}
+
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "allow", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("allow", actionForLogs).Inc()
+			proxy.ServeHTTP(w, r)
 			return
 		}
 
 		claims, err := verifyPoAJWT(poaToken, maxTTLSec, keyFunc, allowedAlgs)
 		if err != nil {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "poa_invalid:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
-			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: "poa_invalid:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 			http.Error(w, "invalid PoA", http.StatusForbidden)
 			return
 		}
@@ -496,19 +620,10 @@ func main() {
 			return
 		}
 
-		bodyBytes, _ := io.ReadAll(r.Body)
-		_ = r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-		params := map[string]interface{}{}
-		if len(bodyBytes) > 0 {
-			_ = json.Unmarshal(bodyBytes, &params)
-		}
-
-		if ok, why := semanticGuardrails(params); !ok {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: why, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+		if actionHeader != "" && actionHeader != claims.Act {
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "action_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
-			http.Error(w, "blocked by semantic firewall", http.StatusForbidden)
+			http.Error(w, "PoA action mismatch", http.StatusForbidden)
 			return
 		}
 
@@ -524,6 +639,7 @@ func main() {
 				"jti": claims.ID,
 			},
 			Request: map[string]interface{}{
+				"action": actionHeader,
 				"method": r.Method,
 				"path":   r.URL.Path,
 				"params": params,
@@ -546,6 +662,17 @@ func main() {
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "policy denied", http.StatusForbidden)
 			return
+		}
+
+		if poaSingleUse {
+			now := time.Now().UTC()
+			until := claims.ExpiresAt.Time.Add(30 * time.Second)
+			if !replay.markIfFresh(claims.ID, until, now) {
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "poa_replay_detected", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
+				http.Error(w, "PoA replay detected", http.StatusForbidden)
+				return
+			}
 		}
 
 		audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "allow", Reason: "policy_allow", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})

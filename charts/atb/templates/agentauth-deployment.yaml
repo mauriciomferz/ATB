@@ -1,4 +1,7 @@
 {{- if .Values.agentauth.enabled }}
+{{- if not .Values.agentauth.secrets.signingKey.name }}
+  {{- fail "agentauth.secrets.signingKey.name must be set when agentauth is enabled (private key must be sourced from a Kubernetes Secret)" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -46,14 +49,10 @@ spec:
               value: {{ .Values.agentauth.env.APPROVAL_SHARED_SECRET | quote }}
               {{- end }}
             - name: POA_SIGNING_ED25519_PRIVKEY_PEM
-              {{- if .Values.agentauth.secrets.signingKey.name }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.agentauth.secrets.signingKey.name | quote }}
                   key: {{ .Values.agentauth.secrets.signingKey.key | quote }}
-              {{- else }}
-              value: {{ .Values.agentauth.env.POA_SIGNING_ED25519_PRIVKEY_PEM | quote }}
-              {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.agentauth.service.port }}

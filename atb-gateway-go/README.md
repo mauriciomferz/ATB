@@ -3,9 +3,11 @@
 This is a **Policy Enforcement Point (PEP)** skeleton for the Agent Tool Broker (ATB).
 
 ## What it does
+
 - Accepts inbound tool calls over HTTPS (mTLS client cert required)
 - Extracts a SPIFFE ID from the client certificate (expects `spiffe://...` URI SAN)
 - Verifies a PoA JWT from `Authorization: Bearer ...` or `X-PoA-Token`
+- Optionally allows low-risk requests without a PoA (policy-controlled)
 - Sends policy input to OPA (`OPA_DECISION_URL`) and enforces allow/deny
 - Emits structured JSON audit events to stdout
 - Exposes health endpoints on a separate HTTP listener (`/health`, `/ready`, `/metrics`)
@@ -13,6 +15,7 @@ This is a **Policy Enforcement Point (PEP)** skeleton for the Agent Tool Broker 
 Audit schema and examples: see [docs/audit.md](../docs/audit.md).
 
 ## Run (dev)
+
 1. Start OPA with the policy in `../opa/policy/poa.rego` loaded (example: `opa run --server ../opa/policy/poa.rego`).
 2. Export required env vars:
    - `UPSTREAM_URL` (e.g., `http://localhost:9000`)
@@ -26,23 +29,35 @@ Audit schema and examples: see [docs/audit.md](../docs/audit.md).
    - Optional: `OPA_HEALTH_URL` (defaults to the same host as `OPA_DECISION_URL` with path `/health`)
    - Optional: `POA_MAX_TTL_SECONDS` (default `300`, hard cap `900`)
    - Optional (JWKS): `POA_JWKS_CACHE_SECONDS` (default `300`)
-   - Optional: `HTTP_LISTEN_ADDR` for health/metrics (default `:8080`)
+
+- Optional: `ALLOW_UNMANDATED_LOW_RISK` (default `false`) — if `true`, the broker may allow low-risk requests without a PoA when OPA permits.
+- Optional: `POA_SINGLE_USE` (default `false`) — if `true`, denies replay of the same PoA `jti` (best-effort, in-memory).
+- Optional: `POA_REPLAY_CACHE_MAX` (default `10000`) — max in-memory PoA `jti` entries.
+- Optional: `HTTP_LISTEN_ADDR` for health/metrics (default `:8080`)
+
 3. Build/run:
    - `go build ./cmd/broker`
    - `./broker`
 
 Notes:
+
 - If `TLS_CLIENT_CA_FILE` is not set in file-based TLS mode, the gateway will accept (but not verify) client certificates (dev-only).
 - In a full SPIRE deployment, prefer the Workload API mode (`SPIFFE_ENDPOINT_SOCKET`) and distribute trust bundles via SPIRE (or your mesh).
+
+Optional request headers:
+
+- `X-ATB-Action` (or legacy `X-Action`): provides the _intended action name_ so policy can validate it and (when present) cross-check it against the PoA `act` claim.
 
 ## Helm defaults (staging/prod)
 
 When deploying via the Helm chart:
+
 - `broker.tls.mode: spiffe` is set in staging/prod values (requires mounting the Workload API socket via the SPIFFE CSI driver).
 - If `broker.env.POA_JWKS_URL` is empty and `agentauth.enabled=true`, the chart defaults the broker’s `POA_JWKS_URL` to the in-cluster AgentAuth JWKS endpoint.
 
 ## CI
 
 The GitHub Actions workflow runs dependency vulnerability scans before deploying:
+
 - Go: `govulncheck`
 - Python: `pip-audit`

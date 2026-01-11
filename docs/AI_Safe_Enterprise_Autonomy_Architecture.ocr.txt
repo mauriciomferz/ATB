@@ -1,0 +1,304 @@
+
+
+===== page-01.png =====
+
+Making Agentic Al Safe for Enterprise Scale
+A Proposal for a Brokered Architecture to Manage Identity, Authority, and Control Across All Al Platforms
+arte = '
+— sh ——
+= aD, =
+We are not blocking AI agents—we are making them
+safe to operate at enterprise scale.
+
+
+===== page-02.png =====
+
+Our Al Ambition Has Outpaced Our
+Security Architecture
+The Situation: AI Agents Are 2] The Complication: Our Access
+Here and Acting on Our Core PH Models Are Fundamentally
+Systems Incompatible
+We are committed to leveraging agentic Traditional access models (API keys, OAuth
+AI to drive efficiency and innovation. scopes) were designed for predictable
+Platforms like Microsoft Copilot, SAP applications, not autonomous agents. They
+Joule, Salesforce Agentforce, cannot express legal authority, delegate
+Moveworks, and n8n are now capable of specific mandates, or enforce business-level
+initiating autonomous actions across our constraints.
+most critical enterprise systems.
+This creates a state of ‘implicit authority’,
+leading to over-privilege, a lack of
+accountability, and an unacceptable level of
+enterprise risk.
+A) NotebookLM
+
+
+===== page-03.png =====
+
+The Current State: Unbrokered Agents Create an
+Unmanageable Attack Surface
+Hidden Permissions: , Static API Key Prompt Injection Risk:
+Copilot SAP
+
+Agents inherit broad oe Se /; A malicious prompt could
+permissions, making SS Uf trigger unauthorised
+their true “blast radius" - actions across any
+impossible to determine. OS ad ted system, f
+
+P SAP Joule + ee sa = | Salesforce Reaariaitereactiene to
+
+XSL KE pastona technology
+- > A ~\ .
+ZAR SIRE
+Salesforce ai eg oN Je — ASS ia IAM
+Agentforce — ZL X*>x ye
+CLI LK
+g Wo,
+No Audit Clarity: Moveworks Neg 3 a | OT Systems | Inconsistent Controls:
+Actions are logged as the A>>< Sek eZ Each platform has its own
+service account, not the YY i security model, leading to
+user's intent. — n8n SG S ca unscalable governance
+Accountability is lost. Admin Token landscape.
+A) NotebookLM
+
+
+===== page-04.png =====
+
+Our Strategic Response:
+A Central Control Plane for All Al Actions
+Al Agent “el j= et ioe a” Met
+SAP Joule ey — (
+ce fe /LW, re see | | eae) swan
+——  ——— ——— =
+p< | | Paes ag Db ee | By IAM
+Moveworks wa | | J pie
+y< Agent Tool Broker .
+nn | oof? | | pa | ee
+We will implement a centralised Agent Tool Broker to act as the single enforcement boundary
+between all agentic AI platforms and enterprise systems.
+No agent ever accesses a system directly. Every action is authenticated, authorised, constrained,
+and audited through the broker, transforming chaos into controlled, safe autonomy.
+A) NotebookLM
+
+
+===== page-05.png =====
+
+Core Architectural Principles
+Agent Tool Broker * Separation of identity and authority
+* No direct agent-to-system access
+: . ¢ Short-lived, non-transferable credentials
+Agent Platforms Policy Enforcement Point as ; ;
+¢ Explicit delegation of authority
+Validates tokens, evaluates policy, fised audinand enh
+CB) erirarcaaiGcnarratni: * Centralised audit and enforcement
+Copilot SAP Joule es Ent ise Syst
+Authority Layer (AgentAuth) NESTS OS SUS S
+(©) () Issues and verifies short-lived
+Proof-of-Authorization (PoA) mandates for
+Moveworks high-risk actions.
+Salesforce =
+Agentforce s SAP Salesforce
+(oot) Identity Layer (SPIFFE) —o
+ngn Provides internal, cryptographic, secret-less (e) apt
+workload identity for the broker and connected
+services. IAMSystem OT Systems
+A) NotebookLM
+
+
+===== page-06.png =====
+
+Principle 1: Establish Universal, Secret-less
+The Challenge How It Works
+Static secrets (API keys, certificates) are a m
+primary target for attackers. Managing (em) (=)
+them at scale for dynamic services is fore Sa = foe ae
+complex and prone to leakage. |s\ - js\
+svID SEINE et Attestation & SVID
+
+Our Solution: SPIFFE Framework tee, at
+
+° : _——\| Cryptographic Workload Identities: Services are identified
+i ae air the ee a eaitee Ge) by secure, short-lived documents (SVIDs), not static keys.
+
+entl ramework for Everyone) and its
+
+‘ a) : ry ° ae: Automatic Rotation: Credentials are rotated automatically
+implementation, SPIRE, to establish a : mS, and frequently without service interruption.
+zero-trust foundation. This removes static ;
+
+f int | : 6) Platform Agnostic: Secures services across cloud,
+secrets dad whe in es a service = Kubernetes, and on-premise environments.
+COTTA COM IAT GAN TN 2 Enables mTLS: Enforces authenticated and encrypted
+
+communication between all internal components.
+A) NotebookLM
+
+
+===== page-07.png =====
+
+Principle 2: Separate Platform Identity from Actionable Authority
+The Challenge Anatomy of a PoA Mandate
+Knowing who an agent is (e.g., ‘Copilot-Tenant-
+123’) does not tell us what it is legally and + alltel
+contextually authorised to do (e.g., ‘approve a i
+£5,000 payment’). Action Scope
+G What specific action is permitted?
+; (e.g., sap.vendor.bank.change’)
+Our Solution: AgentAuth Proof-of-
+Authorization (PoA) Mandates aqe Constraints © =.
+ae ; : ; What are the limits? (e.g., Liability Cap:
+For sensitive actions, the Broker will require a £10,000, Requires Dual Control: True)
+short-lived, cryptographically signed PoA token.
+This token is an explicit, auditable mandate that @ Time Window cae
+grants specific, bounded authority fora single When is this valid? (e.g., Expires in 5 minutes)
+action. It is based on the GAuth standards
+(AAP-001/002). R Legal Grounding
+— Jurisdiction, accountable party.
+A) NotebookLM
+
+
+===== page-08.png =====
+
+Focusing Our Controls on the Actions That Matter Most
+; :
+High-Risk Tier - Requires AgentAuth PoA Mandate
+y SAP vendor bank detail change ; \
+4 SAP payment / journal posting L
+y Salesforce contract value modification .
+/ Salesforce refund / credit issuance ’
+y IAM privilege escalation
+y HR payroll or compensation change .
+y OT actuator / setpomt change \
+y . Procurement order creation above threshold N
+Low-Risk Tier - Allowed with Logging
+* Read-only reporting
+¢ FAQ queries
+* Status lookups
+A) NotebookLM
+
+
+===== page-09.png =====
+
+From Unchecked Risk to Auditable, Bounded Autonomy
+Without Brokered Architecture With Brokered Architecture
+() Hidden Permissions & Implicit Authority __W | Explicit Authority via AgentAuth PoA
+Agents operate with broad, inherited = ol Actions are bound by verifiable, short-
+rights. & lived mandates.
+Static Secrets & Credential Leakage (Ba Secret-less & Short-Lived Credentials
+High risk of compromise leading to lateral a) SPIFFE mTLS eliminates static secrets
+© movement. internally.
+No Audit Clarity Full, Immutable Audit Trail
+EN Actions are untraceable to specific intent lire Every brokered action is centrally logged
+— or delegation. SS and attributable.
+High Blast Radius Controlled Blast Radius
+we A single compromised agent can cause Actions are constrained, preventing lateral
+catastrophic, enterprise-wide damage. movement and limiting potential impact.
+A) NotebookLM
+
+
+===== page-10.png =====
+
+Accelerating Our Journey to Zero Trust Maturity
+This architecture is a significant accelerator, elevating our posture
+from Level 2 (Emerging) to Level 4 (Optimal) in key pillars.
+Level 2: Emerging Level 4: Optimal
+Identity Applications Network Visibility & Automation &
+Analytics Orchestration
+Moves beyond user Treats AI agents as Enforces micro- Provides a single, Applies policy
+identity to enforce untrusted entities, segmentation and centralised source of automatically and
+strong, cryptographic brokering and least-privilege access truth for all Al-initiated consistently across all
+workload identity at inspecting every action between services via actions, dramatically agent platforms,
+every hop (SPIFFE). (API). mandatory mTLS. improving detection removing human error.
+and response.
+A) NotebookLM
+
+
+===== page-11.png =====
+
+A Pragmatic 90-Day Path to Safe Al Autonomy
+(_ Phase 1: Foundation A Phase 2: Identity =" Phase 3: Authority Layer
+S&S (Days 1-30) Hardening (Days 31-60) 7-25 (Days 61-90)
+Actions Actions Actions
+* Deploy the Agent Tool Broker as a * Deploy SPIRE server and agents to * Define the AgentAuth PoA mandate
+minimal viable service. core services. format in collaboration with Legal.
+* Integrate initial platform identity ¢ Enable SPIFFE-based mTLS for ¢ Implement mandate requirement for
+tokens (e.g., Entra ID). internal communication. the top 3 critical actions (e.g., SAP
+¢ Establish central logging. vendor change).
+Outcome Outcome Outcome
+Initial visibility and control plane All static API keys and internal secrets The highest-risk AI actions are now
+established. Direct access paths are are removed from the message path. governed by explicit, auditable
+restricted. Zero Trust identity is achieved. authority.
+A) NotebookLM
+
+
+===== page-12.png =====
+
+A Clear Operating Model for a New
+Enterprise Capability
+BS LX «f
+Coo (Ci
+Coo
+U “ — CW TP
+Security Platform Legal & Business Al/Automation
+Team Team Compliance Owners Teams
+Manages the Ensures the high Defines and Define the risk Focus purely on
+SPIFFE trust availability, approves the thresholds for building agent
+domain and scaling, and legal language their processes _ logic. They do not
+certificates. performance of and structure of (e.g., payment manage
+Performs security the Broker AgentAuth amounts). credentials or
+hardening and service. mandate Specify approval access; they
+monitoring of the templates. Sets | requirements like simply call the
+Broker. policies for dual control. Broker.
+delegation.
+
+
+===== page-13.png =====
+
+The Decision: A Considered Investment in Safe,
+Scalable Innovation
+The Benefits (Pros) || «The Considerations (Cons)
+| Ma
+& New Critical Service: The Broker becomes
+
+Y Safe AI Autonomy: Unlocks the value of a core infrastructure component requiring
+
+automation without accepting unbounded risk. operational support.
+Y Cross-Platform Control: A single policy and audit & Initial Policy Design Effort: Requires
+
+point for Microsoft, SAP, Salesforce, and beyond. collaboration between IT, Security, and
+
+; ae ; Business units to define mandates and
+
+VY NoStatic Secrets: Eliminates a major class of ales.
+
+vulnerabilities through SPIFFE.
+
+J ; & Slight Latency: Introducing a broker adds a
+
+Legal & Regulatory Clarity: Provides regulator-_ marginal, measurable latency to API calls.
+
+ready governance with explicit, auditable authority pia
+
+delegation via AgentAuth. Supports NIS2 and EU & Organisational Change: Requires teams to
+
+AI Act expectations. adopt a new, centralised pattern for AI
+
+; integration.
+
+Y_ Scales to IT and OT: A unified architecture for
+
+both corporate and operational environments.
+
+A) NotebookLM
+
+
+===== page-14.png =====
+
+Enabling Al Autonomy, Responsibly
+This architecture enables our enterprise to safely adopt agentic AI by fundamentally separating identity
+from authority. AI agents will authenticate via their native platforms, but all sensitive actions will be
+brokered, policy-checked, and cryptographically authorised using short-lived AgentAuth mandates.
+Internally, SPIFFE ensures a true zero-trust foundation without static secrets. The result is scalable, cross-
+platform AI autonomy that is auditable, legally defensible, and operationally safe. This is how we innovate
+with confidence.
+
+A) NotebookLM

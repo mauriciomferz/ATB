@@ -21,6 +21,12 @@ package atb.poa
 
 default decision := {"allow": false, "reason": "deny_by_default"}
 
+# If a request is low-risk (e.g., read-only) we may allow it without a PoA.
+# This supports the architecture doc's "Low-Risk Tier - Allowed with Logging".
+#
+# IMPORTANT: Treat this as a *policy choice*. The broker can still be configured
+# to require PoA for everything.
+
 max_ttl_seconds := v {
 	v := input.policy.max_ttl_seconds
 	is_number(v)
@@ -39,6 +45,17 @@ has_field(obj, f) {
 	obj[f]
 }
 
+poa_provided {
+	is_object(input.poa)
+	count(input.poa) > 0
+}
+
+req_action := v {
+	v := input.request.action
+	is_string(v)
+	v != ""
+} else := ""
+
 # Normalized helpers
 agent_spiffe := input.agent.spiffe_id
 poa := input.poa
@@ -50,35 +67,69 @@ poa_ttl := poa.exp - poa.iat
 
 # Main decision
 
+# No-PoA path: allow only low-risk activity.
+decision := {"allow": true, "reason": "allow_low_risk_without_poa"} {
+	not poa_provided
+	low_risk_without_poa
+}
+
+decision := {"allow": false, "reason": "poa_required_for_action"} {
+	not poa_provided
+	not low_risk_without_poa
+}
+
 decision := {"allow": true, "reason": "allow"} {
+	poa_provided
 	count(missing_required_fields) == 0
 	poa_ttl > 0
 	poa_ttl <= hard_cap_ttl_seconds
 	poa_ttl <= max_ttl_seconds
 	poa.sub == agent_spiffe
+	(req_action == "" or act == req_action)
 	action_allowed
 }
 
 # More specific deny reasons (first-match style via else)
 
 decision := {"allow": false, "reason": "missing_required_fields"} {
+	poa_provided
 	count(missing_required_fields) > 0
 } else := {"allow": false, "reason": "ttl_invalid"} {
+	poa_provided
 	count(missing_required_fields) == 0
 	(poa_ttl <= 0 or poa_ttl > hard_cap_ttl_seconds or poa_ttl > max_ttl_seconds)
 } else := {"allow": false, "reason": "sub_mismatch"} {
+	poa_provided
 	count(missing_required_fields) == 0
 	poa_ttl > 0
 	poa_ttl <= hard_cap_ttl_seconds
 	poa_ttl <= max_ttl_seconds
 	poa.sub != agent_spiffe
+} else := {"allow": false, "reason": "action_mismatch"} {
+	poa_provided
+	count(missing_required_fields) == 0
+	poa_ttl > 0
+	poa_ttl <= hard_cap_ttl_seconds
+	poa_ttl <= max_ttl_seconds
+	poa.sub == agent_spiffe
+	req_action != ""
+	act != req_action
 } else := {"allow": false, "reason": "action_denied"} {
+	poa_provided
 	count(missing_required_fields) == 0
 	poa_ttl > 0
 	poa_ttl <= hard_cap_ttl_seconds
 	poa_ttl <= max_ttl_seconds
 	poa.sub == agent_spiffe
 	not action_allowed
+}
+
+# Low-risk defaults
+
+low_risk_without_poa {
+	# Default interpretation for the skeleton: read-only traffic.
+	# Tighten by mapping to explicit action names and/or path allowlists.
+	input.request.method == "GET"
 }
 
 # Pilot actions
