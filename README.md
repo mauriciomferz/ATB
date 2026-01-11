@@ -1,0 +1,156 @@
+# Agent Trust Broker (ATB)
+
+A security enforcement layer for enterprise AI agent deployments, implementing the **AI Safe Enterprise Autonomy Architecture**.
+
+## Overview
+
+ATB provides a **single enforcement boundary** between AI agent platforms and enterprise systems. Every agent action is:
+
+- **Authenticated** via SPIFFE/SPIRE workload identity
+- **Authorized** via signed Proof-of-Authorization (PoA) mandates
+- **Constrained** by OPA policy with risk-tiered controls
+- **Audited** with immutable, tamper-evident logs
+
+```
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│  Agent Platform │──────▶│   ATB Broker    │──────▶│ Enterprise APIs │
+│  (Claude, GPT)  │ mTLS  │  (Enforcement)  │ mTLS  │ (SAP, SF, etc.) │
+└─────────────────┘       └────────┬────────┘       └─────────────────┘
+                                   │
+                          ┌────────┴────────┐
+                          │    OPA Policy   │
+                          │  (Risk Tiers)   │
+                          └─────────────────┘
+```
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **SPIFFE/SPIRE Identity** | X509-SVID for mTLS, JWT-SVID for external APIs, Federation for cross-domain trust |
+| **PoA Mandates** | Short-lived, signed authorization tokens with `act/con/leg` claims (AAP-001/002 style) |
+| **Risk-Tiered Policy** | 145+ enterprise actions across low/medium/high risk tiers |
+| **Dual Control** | High-risk actions require two distinct approvers |
+| **Semantic Guardrails** | Prompt injection detection with external service support |
+| **Immutable Audit** | Azure Blob/S3 Object Lock with hash-chain tamper evidence |
+| **Platform Binding** | OIDC platform tokens bound to SPIFFE identities |
+
+## Quick Start
+
+### Prerequisites
+
+- Kubernetes 1.28+
+- Helm 3.x
+- SPIRE server deployed
+
+### Deploy with Helm
+
+```bash
+# Add staging values
+helm install atb charts/atb \
+  -n atb \
+  -f charts/atb/values-staging.yaml \
+  -f charts/atb/values-observability.yaml
+```
+
+### Verify Deployment
+
+```bash
+kubectl get pods -n atb
+kubectl logs -n atb -l app=atb-broker
+```
+
+## Architecture
+
+### Components
+
+| Component | Description |
+|-----------|-------------|
+| `atb-broker` | Main enforcement gateway (Go) |
+| `atb-agentauth` | PoA issuance service with dual-control support |
+| `opa` | Policy decision engine (sidecar) |
+| `spire-agent` | SPIFFE workload identity |
+
+### Documentation
+
+- [Kubernetes Quickstart](docs/k8s-quickstart.md) - Deployment guide
+- [Operating Model](docs/operating-model.md) - RACI, approval flows, risk thresholds
+- [Enterprise Actions](docs/enterprise-actions.md) - 145+ actions with constraint rules
+- [Audit Schema](docs/audit.md) - Event format and sink configuration
+- [Requirements Compliance](docs/requirements-compliance.md) - Architecture alignment
+
+## Risk Tiers
+
+| Tier | Actions | Approval | Examples |
+|------|---------|----------|----------|
+| **High** | 60+ | Dual control (2 approvers) | SAP payments, PII export, IAM escalation |
+| **Medium** | 40+ | Single approver | CRM updates, order management |
+| **Low** | 45+ | PoA only | Read operations, status checks |
+
+See [`docs/enterprise-actions.md`](docs/enterprise-actions.md) for the complete catalog.
+
+## Configuration
+
+### Environment Variables (Broker)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SPIFFE_ENDPOINT_SOCKET` | SPIRE Workload API socket | `/run/spire/sockets/agent.sock` |
+| `OPA_DECISION_URL` | OPA policy endpoint | `http://localhost:8181/v1/data/atb/poa/decision` |
+| `PLATFORM_JWKS_URL` | Platform OIDC JWKS endpoint | - |
+| `POA_SINGLE_USE` | Enable PoA replay protection | `true` |
+| `ALLOW_UNMANDATED_LOW_RISK` | Allow low-risk without PoA | `false` |
+| `GUARDRAILS_URL` | External guardrails service | - |
+| `AUDIT_SINK_URL` | Audit event sink endpoint | - |
+
+### Connectors
+
+Configure backend system connectors in `config/connectors.example.json`:
+
+```json
+{
+  "connectors": [
+    {
+      "id": "salesforce-prod",
+      "egress_allowlist": ["*.salesforce.com"],
+      "jwt_svid_audience": "https://login.salesforce.com",
+      "jwt_svid_header": "Authorization"
+    }
+  ]
+}
+```
+
+## OPA Policy
+
+The policy engine enforces:
+
+- PoA structure validation (`act`, `con`, `leg`, `jti`, `iat`, `exp`)
+- Risk tier determination and approval requirements
+- Action-specific constraints (amount limits, allowlists, safety bounds)
+- Platform↔SPIFFE identity binding
+
+### Run Policy Tests
+
+```bash
+opa test opa/policy/ -v --v0-compatible
+```
+
+## CI/CD
+
+The GitHub Actions workflow includes:
+
+- **Security audit** - govulncheck, pip-audit
+- **OPA policy tests** - Syntax check, unit tests, coverage
+- **Helm lint** - Chart validation
+- **Multi-arch builds** - amd64/arm64 container images
+- **Staged deployment** - Staging → Production with manual gate
+
+## Contributing
+
+1. Policy changes require Security team approval (CODEOWNER)
+2. All OPA policy changes must include tests
+3. Follow the [operating model](docs/operating-model.md) RACI
+
+## License
+
+Proprietary - Internal use only
