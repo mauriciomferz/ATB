@@ -10,6 +10,9 @@ help:
 	@echo "ATB Development Commands"
 	@echo "========================"
 	@echo ""
+	@echo "Quick Start:"
+	@echo "  make quickstart     - One-command setup for new developers"
+	@echo ""
 	@echo "Setup:"
 	@echo "  make setup          - Install all dependencies"
 	@echo "  make certs          - Generate local dev certificates"
@@ -18,7 +21,10 @@ help:
 	@echo "  make test           - Run all tests (OPA + Go)"
 	@echo "  make test-opa       - Run OPA policy tests"
 	@echo "  make test-go        - Run Go tests with race detection"
+	@echo "  make test-e2e       - Run E2E tests (requires OPA)"
+	@echo "  make test-integration - Run Go integration tests"
 	@echo "  make coverage       - Run tests with coverage report"
+	@echo "  make demo           - Interactive demo of risk tiers"
 	@echo ""
 	@echo "Development:"
 	@echo "  make run-opa        - Start OPA server (localhost:8181)"
@@ -56,6 +62,13 @@ VENV := .venv
 # Go build settings
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
+
+# ============================================================================
+# Quick Start
+# ============================================================================
+
+quickstart:
+	@./scripts/quickstart.sh
 
 # ============================================================================
 # Setup

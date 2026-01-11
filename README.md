@@ -83,6 +83,7 @@ kubectl logs -n atb -l app=atb-broker
 - [Architecture Guide](docs/architecture.md) - System design and components
 - [API Reference - Broker](docs/openapi.yaml) - OpenAPI spec for ATB Broker
 - [API Reference - AgentAuth](docs/openapi-agentauth.yaml) - OpenAPI spec for AgentAuth
+- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
 - [Kubernetes Quickstart](docs/k8s-quickstart.md) - Deployment guide
 - [Operating Model](docs/operating-model.md) - RACI, approval flows, risk thresholds
 - [Enterprise Actions](docs/enterprise-actions.md) - 145+ actions with constraint rules
