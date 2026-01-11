@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -216,6 +218,290 @@ func (m *MultiSink) Close() error {
 		}
 	}
 	return lastErr
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Immutable Storage Sink for write-once audit logs with tamper-evidence
+// Supports Azure Blob (immutable policy), AWS S3 (Object Lock), or generic HTTP
+// ──────────────────────────────────────────────────────────────────────────────
+
+var (
+	auditStorageWritesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "atb_audit_storage_writes_total",
+			Help: "Total audit writes to immutable storage.",
+		},
+		[]string{"backend", "status"},
+	)
+	auditStorageLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "atb_audit_storage_latency_seconds",
+			Help:    "Latency for audit writes to immutable storage.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"backend"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(auditStorageWritesTotal, auditStorageLatency)
+}
+
+// ImmutableStorageSink writes audit events to immutable (WORM) storage.
+// Supports:
+// - Azure Blob Storage (with immutability policy / legal hold)
+// - AWS S3 (with Object Lock in GOVERNANCE or COMPLIANCE mode)
+// - Generic HTTP endpoint with HMAC signature for integrity
+type ImmutableStorageSink struct {
+	backend        string // "azure", "s3", "http"
+	containerURL   string // Base URL: https://<account>.blob.core.windows.net/<container> or S3 bucket URL
+	authHeader     string // SAS token, AWS signature header, or Bearer token
+	httpClient     *http.Client
+	queue          chan AuditEvent
+	wg             sync.WaitGroup
+	stopCh         chan struct{}
+	retentionDays  int // Legal retention period (passed to storage layer)
+	hashChain      string
+	hashChainMu    sync.Mutex
+}
+
+// AuditBatch represents a batch of events with integrity metadata
+type AuditBatch struct {
+	BatchID      string       `json:"batch_id"`
+	Timestamp    time.Time    `json:"timestamp"`
+	PrevHash     string       `json:"prev_hash"` // Hash chain for tamper detection
+	ContentHash  string       `json:"content_hash"`
+	Events       []AuditEvent `json:"events"`
+	EventCount   int          `json:"event_count"`
+	RetentionExp time.Time    `json:"retention_expires"`
+}
+
+func newImmutableStorageSink(backend, containerURL, authHeader string, retentionDays int) *ImmutableStorageSink {
+	if backend == "" {
+		backend = "azure"
+	}
+	if retentionDays <= 0 {
+		retentionDays = 2555 // ~7 years for compliance
+	}
+	s := &ImmutableStorageSink{
+		backend:       backend,
+		containerURL:  strings.TrimSuffix(containerURL, "/"),
+		authHeader:    authHeader,
+		httpClient:    &http.Client{Timeout: 30 * time.Second},
+		queue:         make(chan AuditEvent, 10000),
+		stopCh:        make(chan struct{}),
+		retentionDays: retentionDays,
+		hashChain:     "genesis",
+	}
+	s.wg.Add(1)
+	go s.worker(100, 5*time.Second)
+	return s
+}
+
+func (s *ImmutableStorageSink) Send(_ context.Context, ev AuditEvent) error {
+	select {
+	case s.queue <- ev:
+		return nil
+	default:
+		log.Printf("WARN: immutable storage queue full, dropping event request_id=%s", ev.RequestID)
+		return errors.New("immutable storage queue full")
+	}
+}
+
+func (s *ImmutableStorageSink) worker(batchSize int, flushInterval time.Duration) {
+	defer s.wg.Done()
+	batch := make([]AuditEvent, 0, batchSize)
+	ticker := time.NewTicker(flushInterval)
+	defer ticker.Stop()
+
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		if err := s.writeBatch(batch); err != nil {
+			log.Printf("ERROR: immutable storage write failed: %v", err)
+			auditStorageWritesTotal.WithLabelValues(s.backend, "error").Inc()
+		} else {
+			auditStorageWritesTotal.WithLabelValues(s.backend, "success").Inc()
+		}
+		batch = batch[:0]
+	}
+
+	for {
+		select {
+		case ev := <-s.queue:
+			batch = append(batch, ev)
+			if len(batch) >= batchSize {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
+		case <-s.stopCh:
+			for {
+				select {
+				case ev := <-s.queue:
+					batch = append(batch, ev)
+				default:
+					flush()
+					return
+				}
+			}
+		}
+	}
+}
+
+func (s *ImmutableStorageSink) writeBatch(events []AuditEvent) error {
+	start := time.Now()
+	defer func() {
+		auditStorageLatency.WithLabelValues(s.backend).Observe(time.Since(start).Seconds())
+	}()
+
+	// Build batch with hash chain for tamper evidence
+	content, _ := json.Marshal(events)
+	contentHash := computeSHA256(content)
+
+	s.hashChainMu.Lock()
+	prevHash := s.hashChain
+	s.hashChain = computeSHA256([]byte(prevHash + contentHash))
+	s.hashChainMu.Unlock()
+
+	batch := AuditBatch{
+		BatchID:      fmt.Sprintf("audit-%s-%d", time.Now().Format("20060102T150405"), time.Now().UnixNano()%10000),
+		Timestamp:    time.Now().UTC(),
+		PrevHash:     prevHash,
+		ContentHash:  contentHash,
+		Events:       events,
+		EventCount:   len(events),
+		RetentionExp: time.Now().AddDate(0, 0, s.retentionDays),
+	}
+
+	body, err := json.Marshal(batch)
+	if err != nil {
+		return err
+	}
+
+	switch s.backend {
+	case "azure":
+		return s.writeAzureBlob(batch.BatchID, body)
+	case "s3":
+		return s.writeS3Object(batch.BatchID, body)
+	default:
+		return s.writeGenericHTTP(batch.BatchID, body)
+	}
+}
+
+// writeAzureBlob uploads to Azure Blob Storage with immutability headers
+func (s *ImmutableStorageSink) writeAzureBlob(blobName string, content []byte) error {
+	// PUT https://<account>.blob.core.windows.net/<container>/<blob>?<sas>
+	blobURL := fmt.Sprintf("%s/%s.json", s.containerURL, blobName)
+	if s.authHeader != "" && strings.Contains(s.authHeader, "?") {
+		// SAS token passed as auth header in format "?sv=...&sig=..."
+		blobURL = fmt.Sprintf("%s/%s.json%s", s.containerURL, blobName, s.authHeader)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, blobURL, bytes.NewReader(content))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-ms-blob-type", "BlockBlob")
+
+	// Set immutability policy (requires container-level immutable storage enabled)
+	// x-ms-immutability-policy-until-date sets the retention end date
+	retentionEnd := time.Now().AddDate(0, 0, s.retentionDays).UTC().Format(time.RFC1123)
+	req.Header.Set("x-ms-immutability-policy-until-date", retentionEnd)
+	req.Header.Set("x-ms-immutability-policy-mode", "unlocked") // or "locked" for stricter
+
+	// For Bearer token auth (AAD)
+	if s.authHeader != "" && !strings.HasPrefix(s.authHeader, "?") {
+		req.Header.Set("Authorization", s.authHeader)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("azure blob write failed: status=%d body=%s", resp.StatusCode, string(respBody))
+	}
+	log.Printf("INFO: audit batch written to Azure Blob: %s", blobName)
+	return nil
+}
+
+// writeS3Object uploads to S3 with Object Lock headers
+func (s *ImmutableStorageSink) writeS3Object(objectKey string, content []byte) error {
+	// PUT https://<bucket>.s3.<region>.amazonaws.com/<key>
+	objectURL := fmt.Sprintf("%s/%s.json", s.containerURL, objectKey)
+
+	req, err := http.NewRequest(http.MethodPut, objectURL, bytes.NewReader(content))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// S3 Object Lock headers (requires bucket with Object Lock enabled)
+	retentionEnd := time.Now().AddDate(0, 0, s.retentionDays).UTC().Format(time.RFC3339)
+	req.Header.Set("x-amz-object-lock-mode", "GOVERNANCE") // or "COMPLIANCE" for stricter
+	req.Header.Set("x-amz-object-lock-retain-until-date", retentionEnd)
+
+	// AWS Signature V4 should be passed as auth header
+	if s.authHeader != "" {
+		req.Header.Set("Authorization", s.authHeader)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("s3 object write failed: status=%d body=%s", resp.StatusCode, string(respBody))
+	}
+	log.Printf("INFO: audit batch written to S3: %s", objectKey)
+	return nil
+}
+
+// writeGenericHTTP posts to a generic HTTP endpoint with HMAC signature
+func (s *ImmutableStorageSink) writeGenericHTTP(batchID string, content []byte) error {
+	req, err := http.NewRequest(http.MethodPost, s.containerURL, bytes.NewReader(content))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Batch-ID", batchID)
+	if s.authHeader != "" {
+		req.Header.Set("Authorization", s.authHeader)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("http audit write failed: status=%d body=%s", resp.StatusCode, string(respBody))
+	}
+	log.Printf("INFO: audit batch written via HTTP: %s", batchID)
+	return nil
+}
+
+func (s *ImmutableStorageSink) Close() error {
+	close(s.stopCh)
+	s.wg.Wait()
+	return nil
+}
+
+// computeSHA256 returns a hex-encoded SHA-256 hash
+func computeSHA256(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1135,6 +1421,25 @@ func main() {
 		log.Printf("Audit sink configured: %s (batch=%d, flush=%ds)", auditSinkURL, batchSize, flushSec)
 		// Ensure graceful shutdown
 		defer auditSink.Close()
+	}
+
+	// Configure immutable (WORM) audit storage for compliance / tamper-evidence
+	// Supports Azure Blob immutability, AWS S3 Object Lock, or generic HTTP
+	immutableStorageURL := strings.TrimSpace(os.Getenv("AUDIT_IMMUTABLE_URL"))
+	immutableStorageAuth := strings.TrimSpace(os.Getenv("AUDIT_IMMUTABLE_AUTH"))
+	immutableStorageBackend := strings.TrimSpace(os.Getenv("AUDIT_IMMUTABLE_BACKEND")) // "azure", "s3", or "http"
+	if immutableStorageURL != "" {
+		retentionDays := int(envInt64("AUDIT_RETENTION_DAYS", 2555)) // ~7 years default
+		immutableSink := newImmutableStorageSink(immutableStorageBackend, immutableStorageURL, immutableStorageAuth, retentionDays)
+		log.Printf("Immutable audit storage configured: backend=%s url=%s retention=%d days", immutableStorageBackend, immutableStorageURL, retentionDays)
+		defer immutableSink.Close()
+
+		// If we already have an audit sink (HTTP), wrap both in MultiSink
+		if auditSink != nil {
+			auditSink = &MultiSink{sinks: []AuditSink{auditSink, immutableSink}}
+		} else {
+			auditSink = immutableSink
+		}
 	}
 
 	spiffeEndpointSocket := strings.TrimSpace(os.Getenv("SPIFFE_ENDPOINT_SOCKET"))

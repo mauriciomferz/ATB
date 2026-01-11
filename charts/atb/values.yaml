@@ -36,6 +36,11 @@ broker:
     AUDIT_SINK_URL: ""
     AUDIT_SINK_BATCH_SIZE: "100"
     AUDIT_SINK_FLUSH_SECONDS: "5"
+    # Immutable (WORM) audit storage for compliance / tamper-evidence
+    # Supports: Azure Blob (immutability policy), AWS S3 (Object Lock), generic HTTP
+    AUDIT_IMMUTABLE_URL: ""
+    AUDIT_IMMUTABLE_BACKEND: "azure"  # "azure", "s3", or "http"
+    AUDIT_RETENTION_DAYS: "2555"      # ~7 years default for compliance
   secrets:
     # If set, these override the corresponding plaintext env vars above.
     poaJwksUrl:
@@ -48,6 +53,10 @@ broker:
     auditSinkAuth:
       name: ""
       key: "audit_sink_auth"
+    # Immutable storage auth (SAS token, AWS sig, or Bearer token)
+    immutableStorageAuth:
+      name: ""
+      key: "immutable_storage_auth"
     # Guardrails auth (e.g., "Bearer <token>" or API key for Azure AI Content Safety)
     guardrailsAuth:
       name: ""

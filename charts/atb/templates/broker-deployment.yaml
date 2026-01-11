@@ -77,6 +77,22 @@ spec:
                   key: {{ .Values.broker.secrets.auditSinkAuth.key | quote }}
             {{- end }}
             {{- end }}
+            {{- /* Immutable (WORM) audit storage for compliance / tamper-evidence */}}
+            {{- if .Values.broker.env.AUDIT_IMMUTABLE_URL }}
+            - name: AUDIT_IMMUTABLE_URL
+              value: {{ .Values.broker.env.AUDIT_IMMUTABLE_URL | quote }}
+            - name: AUDIT_IMMUTABLE_BACKEND
+              value: {{ .Values.broker.env.AUDIT_IMMUTABLE_BACKEND | quote }}
+            - name: AUDIT_RETENTION_DAYS
+              value: {{ .Values.broker.env.AUDIT_RETENTION_DAYS | quote }}
+            {{- if .Values.broker.secrets.immutableStorageAuth.name }}
+            - name: AUDIT_IMMUTABLE_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.broker.secrets.immutableStorageAuth.name | quote }}
+                  key: {{ .Values.broker.secrets.immutableStorageAuth.key | quote }}
+            {{- end }}
+            {{- end }}
             {{- if eq .Values.broker.tls.mode "secret" }}
             - name: TLS_CERT_FILE
               value: /tls/tls.crt
