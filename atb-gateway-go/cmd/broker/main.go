@@ -908,22 +908,188 @@ func verifyPoAJWT(tokenStr string, maxTTLSec int64, keyFunc jwt.Keyfunc, allowed
 	return claims, nil
 }
 
-func semanticGuardrails(params map[string]interface{}) (bool, string) {
-	// Placeholder for NeMo Guardrails.
-	bad := []string{"ignore previous", "disable safety", "exfiltrate", "curl http", "drop table"}
-	for _, v := range params {
-		s, ok := v.(string)
-		if !ok {
-			continue
-		}
+// ──────────────────────────────────────────────────────────────────────────────
+// Semantic Guardrails - prompt injection / content safety filtering
+// ──────────────────────────────────────────────────────────────────────────────
+
+// GuardrailsClient handles content safety checks via external service
+type GuardrailsClient struct {
+	URL        string
+	AuthHeader string
+	HTTP       *http.Client
+	Enabled    bool
+}
+
+// GuardrailsRequest is sent to the guardrails service
+type GuardrailsRequest struct {
+	Text       string                 `json:"text"`
+	Action     string                 `json:"action,omitempty"`
+	Agent      string                 `json:"agent,omitempty"`
+	Parameters map[string]interface{} `json:"parameters,omitempty"`
+}
+
+// GuardrailsResponse from the guardrails service
+type GuardrailsResponse struct {
+	Safe    bool   `json:"safe"`
+	Reason  string `json:"reason,omitempty"`
+	Score   float64 `json:"score,omitempty"`
+	Category string `json:"category,omitempty"`
+}
+
+var guardrailsClient *GuardrailsClient
+
+// Prometheus metrics for guardrails
+var (
+	guardrailsRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "atb_guardrails_requests_total", Help: "Guardrails check requests"},
+		[]string{"result", "category"},
+	)
+	guardrailsLatencySeconds = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "atb_guardrails_latency_seconds",
+			Help:    "Guardrails check latency",
+			Buckets: []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0},
+		},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(guardrailsRequestsTotal, guardrailsLatencySeconds)
+}
+
+func (g *GuardrailsClient) Check(ctx context.Context, req GuardrailsRequest) (bool, string) {
+	if g == nil || !g.Enabled || g.URL == "" {
+		// Fall back to local pattern matching if no external service
+		return localGuardrailsCheck(req.Text, req.Parameters)
+	}
+
+	start := time.Now()
+	defer func() {
+		guardrailsLatencySeconds.Observe(time.Since(start).Seconds())
+	}()
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		log.Printf("WARN: guardrails marshal error: %v", err)
+		guardrailsRequestsTotal.WithLabelValues("error", "marshal").Inc()
+		return true, "" // fail-open on error (configurable)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, g.URL, bytes.NewReader(body))
+	if err != nil {
+		guardrailsRequestsTotal.WithLabelValues("error", "request").Inc()
+		return true, ""
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if g.AuthHeader != "" {
+		httpReq.Header.Set("Authorization", g.AuthHeader)
+	}
+
+	resp, err := g.HTTP.Do(httpReq)
+	if err != nil {
+		log.Printf("WARN: guardrails request error: %v", err)
+		guardrailsRequestsTotal.WithLabelValues("error", "network").Inc()
+		return true, "" // fail-open
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		guardrailsRequestsTotal.WithLabelValues("error", "http_error").Inc()
+		return true, ""
+	}
+
+	var result GuardrailsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		guardrailsRequestsTotal.WithLabelValues("error", "decode").Inc()
+		return true, ""
+	}
+
+	if result.Safe {
+		guardrailsRequestsTotal.WithLabelValues("allow", result.Category).Inc()
+		return true, ""
+	}
+
+	guardrailsRequestsTotal.WithLabelValues("block", result.Category).Inc()
+	return false, result.Reason
+}
+
+// localGuardrailsCheck performs basic pattern matching when no external service is configured
+func localGuardrailsCheck(text string, params map[string]interface{}) (bool, string) {
+	// Patterns indicating potential prompt injection or malicious content
+	dangerousPatterns := []string{
+		"ignore previous",
+		"ignore all previous",
+		"disregard previous",
+		"forget previous",
+		"disable safety",
+		"bypass security",
+		"you are now",
+		"pretend you are",
+		"act as if",
+		"jailbreak",
+		"dan mode",
+		"developer mode",
+		"exfiltrate",
+		"curl http",
+		"wget http",
+		"drop table",
+		"delete from",
+		"; exec",
+		"$(", // command substitution
+		"`",  // backtick command substitution
+	}
+
+	checkText := func(s string) (bool, string) {
 		low := strings.ToLower(s)
-		for _, b := range bad {
-			if strings.Contains(low, b) {
-				return false, "semantic_firewall_block"
+		for _, pattern := range dangerousPatterns {
+			if strings.Contains(low, pattern) {
+				return false, "prompt_injection_detected"
+			}
+		}
+		return true, ""
+	}
+
+	// Check main text
+	if text != "" {
+		if safe, reason := checkText(text); !safe {
+			return safe, reason
+		}
+	}
+
+	// Check all string parameters
+	for _, v := range params {
+		if s, ok := v.(string); ok {
+			if safe, reason := checkText(s); !safe {
+				return safe, reason
 			}
 		}
 	}
+
 	return true, ""
+}
+
+// semanticGuardrails is the main entry point for guardrails checks
+func semanticGuardrails(ctx context.Context, action, agent string, params map[string]interface{}) (bool, string) {
+	// Build combined text from all params for checking
+	var textParts []string
+	for k, v := range params {
+		if s, ok := v.(string); ok {
+			textParts = append(textParts, fmt.Sprintf("%s: %s", k, s))
+		}
+	}
+	combinedText := strings.Join(textParts, "\n")
+
+	req := GuardrailsRequest{
+		Text:       combinedText,
+		Action:     action,
+		Agent:      agent,
+		Parameters: params,
+	}
+
+	if guardrailsClient != nil {
+		return guardrailsClient.Check(ctx, req)
+	}
+	return localGuardrailsCheck(combinedText, params)
 }
 
 func audit(ev AuditEvent) {
@@ -1001,6 +1167,21 @@ func main() {
 			log.Fatalf("Failed to load connector config: %v", err)
 		}
 		log.Printf("Loaded connector config from %s", connectorConfigFile)
+	}
+
+	// Semantic guardrails / content safety service
+	guardrailsURL := strings.TrimSpace(os.Getenv("GUARDRAILS_URL"))
+	guardrailsAuth := strings.TrimSpace(os.Getenv("GUARDRAILS_AUTH")) // e.g., "Bearer <token>" or API key
+	if guardrailsURL != "" {
+		guardrailsClient = &GuardrailsClient{
+			URL:        guardrailsURL,
+			AuthHeader: guardrailsAuth,
+			HTTP:       &http.Client{Timeout: 2 * time.Second},
+			Enabled:    true,
+		}
+		log.Printf("Guardrails service configured: %s", guardrailsURL)
+	} else {
+		log.Printf("Guardrails: using local pattern matching (no external service configured)")
 	}
 
 	targetURL := mustParseURL(upstream)
@@ -1083,7 +1264,7 @@ func main() {
 			_ = json.Unmarshal(bodyBytes, &params)
 		}
 
-		if ok, why := semanticGuardrails(params); !ok {
+		if ok, why := semanticGuardrails(r.Context(), actionForLogs, agentSPIFFE, params); !ok {
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: why, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 			http.Error(w, "blocked by semantic firewall", http.StatusForbidden)

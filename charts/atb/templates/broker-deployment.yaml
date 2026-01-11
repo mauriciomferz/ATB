@@ -101,6 +101,17 @@ spec:
             - name: CONNECTOR_CONFIG_FILE
               value: "/config/connectors/connectors.json"
             {{- end }}
+            {{- if .Values.broker.guardrails.url }}
+            - name: GUARDRAILS_URL
+              value: {{ .Values.broker.guardrails.url | quote }}
+            {{- if .Values.broker.secrets.guardrailsAuth.name }}
+            - name: GUARDRAILS_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.broker.secrets.guardrailsAuth.name | quote }}
+                  key: {{ .Values.broker.secrets.guardrailsAuth.key | quote }}
+            {{- end }}
+            {{- end }}
           ports:
             - name: mtls
               containerPort: {{ .Values.broker.service.mtlsPort }}

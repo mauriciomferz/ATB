@@ -48,6 +48,15 @@ broker:
     auditSinkAuth:
       name: ""
       key: "audit_sink_auth"
+    # Guardrails auth (e.g., "Bearer <token>" or API key for Azure AI Content Safety)
+    guardrailsAuth:
+      name: ""
+      key: "guardrails_auth"
+  # Semantic guardrails / content safety service
+  guardrails:
+    # External guardrails service URL (e.g., Azure AI Content Safety endpoint)
+    # Leave empty to use local pattern matching only
+    url: ""
   # Connector configuration for multi-backend routing
   connectors:
     # If enabled, provide config inline or via ConfigMap
