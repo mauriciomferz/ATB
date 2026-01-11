@@ -64,7 +64,61 @@ constraints := poa.con
 leg := poa.leg
 params := input.request.params
 
+# Platform identity (from OIDC token like Entra ID)
+platform := input.platform
+platform_sub := platform.sub
+
 poa_ttl := poa.exp - poa.iat
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Platform ↔ SPIFFE identity binding validation
+# When enabled, the platform identity (OIDC sub) must map to the SPIFFE ID
+# of the calling agent. This prevents token-forwarding attacks.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Policy data: set via /v1/policies or data document
+# data.platform_binding.mode: "none" | "exact" | "prefix" | "mapping"
+# data.platform_binding.mappings: {"platform_sub": "spiffe_pattern"}
+
+platform_binding_mode := data.platform_binding.mode
+
+# No binding enforcement if mode is not set or is "none"
+platform_spiffe_binding_valid {
+	not platform_binding_mode
+}
+
+platform_spiffe_binding_valid {
+	platform_binding_mode == "none"
+}
+
+# Exact mode: platform sub must exactly match SPIFFE ID
+platform_spiffe_binding_valid {
+	platform_binding_mode == "exact"
+	platform_sub == agent_spiffe
+}
+
+# Prefix mode: platform sub should appear in SPIFFE ID path
+platform_spiffe_binding_valid {
+	platform_binding_mode == "prefix"
+	contains(agent_spiffe, concat("/", ["", platform_sub, ""]))
+}
+
+platform_spiffe_binding_valid {
+	platform_binding_mode == "prefix"
+	endswith(agent_spiffe, concat("/", ["", platform_sub]))
+}
+
+# Mapping mode: lookup platform_sub -> SPIFFE pattern in data
+platform_spiffe_binding_valid {
+	platform_binding_mode == "mapping"
+	pattern := data.platform_binding.mappings[platform_sub]
+	regex.match(pattern, agent_spiffe)
+}
+
+platform_binding_reason := reason {
+	not platform_spiffe_binding_valid
+	reason := sprintf("platform_sub '%s' does not match SPIFFE ID '%s'", [platform_sub, agent_spiffe])
+}
 
 # TTL validity helpers
 ttl_valid {
@@ -163,6 +217,7 @@ decision := {"allow": true, "reason": "allow"} {
 	leg_valid
 	ttl_valid
 	poa.sub == agent_spiffe
+	platform_spiffe_binding_valid
 	action_matches_request
 	action_allowed
 }
@@ -197,12 +252,20 @@ decision := {"allow": false, "reason": "missing_required_fields"} {
 	leg_valid
 	ttl_valid
 	poa.sub != agent_spiffe
+} else := {"allow": false, "reason": "platform_spiffe_binding_mismatch", "details": platform_binding_reason} {
+	poa_provided
+	count(missing_required_fields) == 0
+	leg_valid
+	ttl_valid
+	poa.sub == agent_spiffe
+	not platform_spiffe_binding_valid
 } else := {"allow": false, "reason": "action_mismatch"} {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
 	ttl_valid
 	poa.sub == agent_spiffe
+	platform_spiffe_binding_valid
 	req_action != ""
 	act != req_action
 } else := {"allow": false, "reason": "action_denied"} {
@@ -211,6 +274,7 @@ decision := {"allow": false, "reason": "missing_required_fields"} {
 	leg_valid
 	ttl_valid
 	poa.sub == agent_spiffe
+	platform_spiffe_binding_valid
 	not action_allowed
 }
 

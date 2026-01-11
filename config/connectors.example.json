@@ -31,7 +31,9 @@
       "rate_limit": 50,
       "burst_limit": 100,
       "timeout": "60s",
-      "headers": {}
+      "headers": {},
+      "jwt_svid_audience": "https://login.salesforce.com",
+      "jwt_svid_header": "Authorization"
     },
     {
       "id": "servicenow-prod",
@@ -59,7 +61,9 @@
       "rate_limit": 40,
       "burst_limit": 80,
       "timeout": "30s",
-      "headers": {}
+      "headers": {},
+      "jwt_svid_audience": "https://myorg.crm.dynamics.com",
+      "jwt_svid_header": "Authorization"
     },
     {
       "id": "workday-prod",

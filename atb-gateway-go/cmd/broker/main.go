@@ -28,7 +28,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spiffe/go-spiffe/v2/bundle/jwtbundle"
+	"github.com/spiffe/go-spiffe/v2/federation"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 )
@@ -505,6 +509,245 @@ func computeSHA256(data []byte) string {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// SPIFFE JWT-SVID source for external API authentication
+// Fetches short-lived JWT-SVIDs from Workload API for bearer token auth
+// ──────────────────────────────────────────────────────────────────────────────
+
+var (
+	jwtSVIDFetchTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "atb_jwt_svid_fetch_total",
+			Help: "JWT-SVID fetch attempts from Workload API.",
+		},
+		[]string{"status", "audience"},
+	)
+	jwtSVIDFetchLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "atb_jwt_svid_fetch_latency_seconds",
+			Help:    "Latency for JWT-SVID fetch operations.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"audience"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(jwtSVIDFetchTotal, jwtSVIDFetchLatency)
+}
+
+// JWTSVIDSource manages JWT-SVID fetching from SPIFFE Workload API
+type JWTSVIDSource struct {
+	client   *workloadapi.Client
+	cache    sync.Map // audience -> cachedJWTSVID
+	cacheTTL time.Duration
+}
+
+type cachedJWTSVID struct {
+	token   string
+	expires time.Time
+}
+
+var jwtSVIDSource *JWTSVIDSource
+
+func newJWTSVIDSource(ctx context.Context, socketPath string, cacheTTL time.Duration) (*JWTSVIDSource, error) {
+	client, err := workloadapi.New(ctx, workloadapi.WithAddr(socketPath))
+	if err != nil {
+		return nil, fmt.Errorf("creating JWT-SVID workload client: %w", err)
+	}
+	if cacheTTL <= 0 {
+		cacheTTL = 30 * time.Second // cache tokens for 30s by default
+	}
+	return &JWTSVIDSource{client: client, cacheTTL: cacheTTL}, nil
+}
+
+// FetchJWTSVID gets a JWT-SVID for the given audience (e.g., "https://api.salesforce.com")
+func (s *JWTSVIDSource) FetchJWTSVID(ctx context.Context, audience string) (string, error) {
+	// Check cache first
+	if cached, ok := s.cache.Load(audience); ok {
+		c := cached.(*cachedJWTSVID)
+		if time.Now().Before(c.expires) {
+			return c.token, nil
+		}
+	}
+
+	start := time.Now()
+	svids, err := s.client.FetchJWTSVIDs(ctx, jwtsvid.Params{Audience: audience})
+	elapsed := time.Since(start).Seconds()
+	jwtSVIDFetchLatency.WithLabelValues(audience).Observe(elapsed)
+
+	if err != nil {
+		jwtSVIDFetchTotal.WithLabelValues("error", audience).Inc()
+		return "", fmt.Errorf("fetching JWT-SVID for %s: %w", audience, err)
+	}
+	if len(svids) == 0 {
+		jwtSVIDFetchTotal.WithLabelValues("empty", audience).Inc()
+		return "", fmt.Errorf("no JWT-SVID returned for audience %s", audience)
+	}
+
+	jwtSVIDFetchTotal.WithLabelValues("success", audience).Inc()
+	token := svids[0].Marshal()
+
+	// Cache with buffer before actual expiry
+	expiry := svids[0].Expiry.Add(-10 * time.Second)
+	if expiry.After(time.Now()) {
+		s.cache.Store(audience, &cachedJWTSVID{token: token, expires: expiry})
+	}
+
+	return token, nil
+}
+
+func (s *JWTSVIDSource) Close() error {
+	return s.client.Close()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SPIFFE Federation - trust bundles from federated trust domains
+// ──────────────────────────────────────────────────────────────────────────────
+
+// FederationConfig holds federated trust domain configurations
+type FederationConfig struct {
+	TrustDomains []FederatedDomain `json:"trust_domains"`
+}
+
+type FederatedDomain struct {
+	TrustDomain string `json:"trust_domain"` // e.g., "partner.example.com"
+	BundleURL   string `json:"bundle_url"`   // SPIFFE bundle endpoint URL
+	Enabled     bool   `json:"enabled"`
+}
+
+// FederationManager manages trust bundles from federated SPIFFE domains
+type FederationManager struct {
+	mu       sync.RWMutex
+	bundles  map[string]*jwtbundle.Bundle // trust_domain -> bundle
+	config   FederationConfig
+	stopCh   chan struct{}
+	interval time.Duration
+}
+
+var federationMgr *FederationManager
+
+func newFederationManager(config FederationConfig, refreshInterval time.Duration) *FederationManager {
+	if refreshInterval <= 0 {
+		refreshInterval = 5 * time.Minute
+	}
+	return &FederationManager{
+		bundles:  make(map[string]*jwtbundle.Bundle),
+		config:   config,
+		stopCh:   make(chan struct{}),
+		interval: refreshInterval,
+	}
+}
+
+func (f *FederationManager) Start(ctx context.Context) {
+	// Initial fetch
+	f.refreshBundles(ctx)
+	// Periodic refresh
+	go func() {
+		ticker := time.NewTicker(f.interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				f.refreshBundles(ctx)
+			case <-f.stopCh:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (f *FederationManager) refreshBundles(ctx context.Context) {
+	for _, domain := range f.config.TrustDomains {
+		if !domain.Enabled {
+			continue
+		}
+		td, err := spiffeid.TrustDomainFromString(domain.TrustDomain)
+		if err != nil {
+			log.Printf("WARN: invalid trust domain %q: %v", domain.TrustDomain, err)
+			continue
+		}
+		bundle, err := federation.FetchBundle(ctx, td, domain.BundleURL)
+		if err != nil {
+			log.Printf("WARN: failed to fetch bundle for %s from %s: %v", domain.TrustDomain, domain.BundleURL, err)
+			continue
+		}
+		f.mu.Lock()
+		f.bundles[domain.TrustDomain] = bundle.JWTBundle()
+		f.mu.Unlock()
+		log.Printf("INFO: refreshed federation bundle for %s", domain.TrustDomain)
+	}
+}
+
+func (f *FederationManager) GetBundle(trustDomain string) *jwtbundle.Bundle {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.bundles[trustDomain]
+}
+
+func (f *FederationManager) Stop() {
+	close(f.stopCh)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Platform ↔ SPIFFE identity binding
+// Validates that platform OIDC sub claim maps to caller's SPIFFE ID
+// ──────────────────────────────────────────────────────────────────────────────
+
+// SPIFFEPlatformBinding defines the mapping between platform identity and SPIFFE ID
+type SPIFFEPlatformBinding struct {
+	// Mode: "exact" (sub must match SPIFFE ID), "prefix" (sub is prefix of SPIFFE path), "mapping" (lookup table)
+	Mode string `json:"mode"`
+	// Mappings for "mapping" mode: platform sub -> allowed SPIFFE ID pattern
+	Mappings map[string]string `json:"mappings,omitempty"`
+}
+
+var platformBindingConfig SPIFFEPlatformBinding
+
+// ValidatePlatformSPIFFEBinding checks if the platform sub claim matches the caller's SPIFFE ID
+func ValidatePlatformSPIFFEBinding(platformSub, spiffeID string) (bool, string) {
+	if platformBindingConfig.Mode == "" || platformBindingConfig.Mode == "none" {
+		return true, "" // binding not enforced
+	}
+
+	switch platformBindingConfig.Mode {
+	case "exact":
+		// Platform sub must exactly match SPIFFE ID
+		if platformSub == spiffeID {
+			return true, ""
+		}
+		return false, fmt.Sprintf("platform sub %q does not match SPIFFE ID %q", platformSub, spiffeID)
+
+	case "prefix":
+		// Platform sub should be a prefix of the SPIFFE ID path
+		// e.g., sub="agent-platform-1" matches spiffe://trust.domain/agent-platform-1/worker-123
+		if strings.Contains(spiffeID, "/"+platformSub+"/") || strings.HasSuffix(spiffeID, "/"+platformSub) {
+			return true, ""
+		}
+		return false, fmt.Sprintf("platform sub %q is not in SPIFFE ID path %q", platformSub, spiffeID)
+
+	case "mapping":
+		// Lookup: platform sub -> allowed SPIFFE pattern (regex)
+		pattern, ok := platformBindingConfig.Mappings[platformSub]
+		if !ok {
+			return false, fmt.Sprintf("no mapping found for platform sub %q", platformSub)
+		}
+		matched, err := regexp.MatchString(pattern, spiffeID)
+		if err != nil {
+			return false, fmt.Sprintf("invalid mapping pattern for %q: %v", platformSub, err)
+		}
+		if matched {
+			return true, ""
+		}
+		return false, fmt.Sprintf("SPIFFE ID %q does not match pattern %q for platform %q", spiffeID, pattern, platformSub)
+
+	default:
+		return true, "" // unknown mode, don't block
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Connector types for multi-backend routing with egress allowlists and shaping
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -519,6 +762,9 @@ type Connector struct {
 	TimeoutSec      int               `json:"timeout_seconds,omitempty"`
 	Headers         map[string]string `json:"headers,omitempty"`
 	Enabled         bool              `json:"enabled"`
+	// JWT-SVID identity injection for external APIs (SPIFFE-based auth)
+	JWTSVIDAudience string `json:"jwt_svid_audience,omitempty"` // if set, fetch JWT-SVID for this audience
+	JWTSVIDHeader   string `json:"jwt_svid_header,omitempty"`   // header name for JWT-SVID (default: Authorization)
 	egressPatterns  []*regexp.Regexp
 	proxy           *httputil.ReverseProxy
 	limiter         *connectorLimiter
@@ -701,6 +947,31 @@ func (c *Connector) AddHeaders(r *http.Request) {
 	for k, v := range c.Headers {
 		r.Header.Set(k, v)
 	}
+}
+
+// AddHeadersWithJWTSVID adds static headers plus JWT-SVID for external API auth
+func (c *Connector) AddHeadersWithJWTSVID(ctx context.Context, r *http.Request) error {
+	// Add static headers first
+	c.AddHeaders(r)
+
+	// Inject JWT-SVID if configured
+	if c.JWTSVIDAudience != "" && jwtSVIDSource != nil {
+		token, err := jwtSVIDSource.FetchJWTSVID(ctx, c.JWTSVIDAudience)
+		if err != nil {
+			return fmt.Errorf("fetching JWT-SVID for connector %s: %w", c.ID, err)
+		}
+		header := c.JWTSVIDHeader
+		if header == "" {
+			header = "Authorization"
+		}
+		if header == "Authorization" {
+			r.Header.Set(header, "Bearer "+token)
+		} else {
+			r.Header.Set(header, token)
+		}
+		log.Printf("DEBUG: injected JWT-SVID for connector %s audience %s", c.ID, c.JWTSVIDAudience)
+	}
+	return nil
 }
 
 // Prometheus metrics for connectors
@@ -1489,6 +1760,58 @@ func main() {
 		log.Printf("Guardrails: using local pattern matching (no external service configured)")
 	}
 
+	// JWT-SVID source for external API authentication (SPIFFE-based)
+	if spiffeEndpointSocket != "" {
+		jwtCacheTTL := time.Duration(envInt64("JWT_SVID_CACHE_TTL_SECONDS", 30)) * time.Second
+		ctx := context.Background()
+		src, err := newJWTSVIDSource(ctx, spiffeEndpointSocket, jwtCacheTTL)
+		if err != nil {
+			log.Printf("WARN: JWT-SVID source not available (connectors won't have SPIFFE auth): %v", err)
+		} else {
+			jwtSVIDSource = src
+			defer jwtSVIDSource.Close()
+			log.Printf("JWT-SVID source initialized (cache TTL %s)", jwtCacheTTL)
+		}
+	}
+
+	// SPIFFE Federation - load trust bundles from federated domains
+	federationConfigFile := strings.TrimSpace(os.Getenv("SPIFFE_FEDERATION_CONFIG"))
+	if federationConfigFile != "" {
+		data, err := os.ReadFile(federationConfigFile)
+		if err != nil {
+			log.Printf("WARN: failed to read federation config %s: %v", federationConfigFile, err)
+		} else {
+			var fedConfig FederationConfig
+			if err := json.Unmarshal(data, &fedConfig); err != nil {
+				log.Printf("WARN: invalid federation config: %v", err)
+			} else {
+				refreshInterval := time.Duration(envInt64("SPIFFE_FEDERATION_REFRESH_SECONDS", 300)) * time.Second
+				federationMgr = newFederationManager(fedConfig, refreshInterval)
+				ctx := context.Background()
+				federationMgr.Start(ctx)
+				defer federationMgr.Stop()
+				log.Printf("SPIFFE Federation manager started with %d trust domains", len(fedConfig.TrustDomains))
+			}
+		}
+	}
+
+	// Platform ↔ SPIFFE binding mode (none, exact, prefix, mapping)
+	platBindingMode := strings.TrimSpace(os.Getenv("PLATFORM_SPIFFE_BINDING_MODE"))
+	if platBindingMode != "" && platBindingMode != "none" {
+		platformBindingConfig.Mode = platBindingMode
+		platMappingFile := strings.TrimSpace(os.Getenv("PLATFORM_SPIFFE_MAPPING_FILE"))
+		if platBindingMode == "mapping" && platMappingFile != "" {
+			data, err := os.ReadFile(platMappingFile)
+			if err != nil {
+				log.Fatalf("Failed to read platform-SPIFFE mapping file: %v", err)
+			}
+			if err := json.Unmarshal(data, &platformBindingConfig.Mappings); err != nil {
+				log.Fatalf("Invalid platform-SPIFFE mapping JSON: %v", err)
+			}
+		}
+		log.Printf("Platform↔SPIFFE binding enabled: mode=%s", platBindingMode)
+	}
+
 	targetURL := mustParseURL(upstream)
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	httpClient := &http.Client{Timeout: 1500 * time.Millisecond}
@@ -1550,6 +1873,14 @@ func main() {
 				"azp":   platClaims.Azp,
 				"iss":   platClaims.Issuer,
 				"aud":   platClaims.Audience,
+			}
+
+			// Validate Platform ↔ SPIFFE binding if configured
+			if valid, reason := ValidatePlatformSPIFFEBinding(platformID, agentSPIFFE); !valid {
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Decision: "deny", Reason: "spiffe_binding_mismatch:" + reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				brokerRequestsTotal.WithLabelValues("deny", "").Inc()
+				http.Error(w, "platform identity does not match SPIFFE identity", http.StatusForbidden)
+				return
 			}
 		}
 

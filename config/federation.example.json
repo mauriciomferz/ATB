@@ -1,0 +1,19 @@
+{
+  "trust_domains": [
+    {
+      "trust_domain": "partner.example.com",
+      "bundle_url": "https://spire.partner.example.com/.well-known/jwks.json",
+      "enabled": true
+    },
+    {
+      "trust_domain": "cloud.example.com",
+      "bundle_url": "https://spire.cloud.example.com:8443/bundle",
+      "enabled": true
+    },
+    {
+      "trust_domain": "legacy.internal",
+      "bundle_url": "https://trust-broker.internal:9090/v1/bundle",
+      "enabled": false
+    }
+  ]
+}

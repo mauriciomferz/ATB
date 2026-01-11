@@ -128,6 +128,29 @@ spec:
                   key: {{ .Values.broker.secrets.guardrailsAuth.key | quote }}
             {{- end }}
             {{- end }}
+            {{- /* SPIFFE JWT-SVID settings */}}
+            {{- if .Values.broker.jwtSvid }}
+            - name: JWT_SVID_CACHE_TTL_SECONDS
+              value: {{ .Values.broker.jwtSvid.cacheTTLSeconds | quote }}
+            {{- end }}
+            {{- /* SPIFFE Federation */}}
+            {{- if .Values.broker.federation.configMapName }}
+            - name: SPIFFE_FEDERATION_CONFIG
+              value: "/config/federation/federation.json"
+            - name: SPIFFE_FEDERATION_REFRESH_SECONDS
+              value: {{ .Values.broker.federation.refreshSeconds | quote }}
+            {{- end }}
+            {{- /* Platform ↔ SPIFFE binding */}}
+            {{- if and .Values.broker.platformBinding .Values.broker.platformBinding.mode }}
+            {{- if ne .Values.broker.platformBinding.mode "none" }}
+            - name: PLATFORM_SPIFFE_BINDING_MODE
+              value: {{ .Values.broker.platformBinding.mode | quote }}
+            {{- if and (eq .Values.broker.platformBinding.mode "mapping") .Values.broker.platformBinding.mappingConfigMapName }}
+            - name: PLATFORM_SPIFFE_MAPPING_FILE
+              value: "/config/platform-binding/mapping.json"
+            {{- end }}
+            {{- end }}
+            {{- end }}
           ports:
             - name: mtls
               containerPort: {{ .Values.broker.service.mtlsPort }}
@@ -149,6 +172,16 @@ spec:
             {{- if .Values.broker.connectors.enabled }}
             - name: connectors
               mountPath: /config/connectors
+              readOnly: true
+            {{- end }}
+            {{- if .Values.broker.federation.configMapName }}
+            - name: federation
+              mountPath: /config/federation
+              readOnly: true
+            {{- end }}
+            {{- if and .Values.broker.platformBinding (eq .Values.broker.platformBinding.mode "mapping") .Values.broker.platformBinding.mappingConfigMapName }}
+            - name: platform-binding
+              mountPath: /config/platform-binding
               readOnly: true
             {{- end }}
           livenessProbe:
@@ -179,5 +212,15 @@ spec:
         - name: connectors
           configMap:
             name: {{ default (printf "%s-broker-connectors" .Release.Name) .Values.broker.connectors.configMapName }}
+        {{- end }}
+        {{- if .Values.broker.federation.configMapName }}
+        - name: federation
+          configMap:
+            name: {{ .Values.broker.federation.configMapName }}
+        {{- end }}
+        {{- if and .Values.broker.platformBinding (eq .Values.broker.platformBinding.mode "mapping") .Values.broker.platformBinding.mappingConfigMapName }}
+        - name: platform-binding
+          configMap:
+            name: {{ .Values.broker.platformBinding.mappingConfigMapName }}
         {{- end }}
 {{- end }}

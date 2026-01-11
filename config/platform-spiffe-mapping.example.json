@@ -1,0 +1,6 @@
+{
+  "agent-platform-copilot": "spiffe://trust.domain/ns/copilot/.*",
+  "agent-platform-openai": "spiffe://trust.domain/ns/openai/agent-.*",
+  "agent-platform-anthropic": "spiffe://trust.domain/ns/anthropic/claude-.*",
+  "svc-account-123": "spiffe://trust.domain/ns/default/sa/svc-account-123"
+}

@@ -66,6 +66,22 @@ broker:
     # External guardrails service URL (e.g., Azure AI Content Safety endpoint)
     # Leave empty to use local pattern matching only
     url: ""
+  # SPIFFE JWT-SVID for external API authentication
+  jwtSvid:
+    # Cache TTL in seconds for JWT-SVIDs (default 30s)
+    cacheTTLSeconds: "30"
+  # SPIFFE Federation - trust bundles from federated domains
+  federation:
+    # ConfigMap name containing federation.json with trust domains
+    configMapName: ""
+    # Refresh interval for federation bundles (seconds)
+    refreshSeconds: "300"
+  # Platform ↔ SPIFFE identity binding
+  platformBinding:
+    # Mode: "none" (disabled), "exact" (sub == SPIFFE ID), "prefix" (sub in path), "mapping" (lookup table)
+    mode: "none"
+    # ConfigMap name containing platform-spiffe-mapping.json (for "mapping" mode)
+    mappingConfigMapName: ""
   # Connector configuration for multi-backend routing
   connectors:
     # If enabled, provide config inline or via ConfigMap
