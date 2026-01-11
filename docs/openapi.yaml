@@ -1,0 +1,435 @@
+openapi: 3.1.0
+info:
+  title: ATB Broker API
+  description: |
+    Agent Trust Broker (ATB) API for secure AI agent action authorization.
+    
+    The broker validates Proof-of-Authorization (PoA) tokens and enforces
+    risk-tiered authorization policies before proxying requests to upstream
+    SaaS systems.
+  version: 1.0.0
+  contact:
+    name: ATB Team
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://localhost:8443
+    description: Local development (mTLS)
+  - url: https://atb.example.com
+    description: Production
+
+security:
+  - mtls: []
+  - bearerAuth: []
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Proxy
+    description: Authorized request proxying
+  - name: Audit
+    description: Audit and compliance endpoints
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns the health status of the broker
+      operationId: getHealth
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Broker is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: Returns whether the broker is ready to accept traffic
+      operationId: getReady
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Broker is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: Broker is not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /{path}:
+    post:
+      summary: Execute authorized action
+      description: |
+        Proxies an authorized request to the upstream backend.
+        
+        The request must include:
+        1. Valid mTLS client certificate with SPIFFE ID
+        2. Valid PoA token in Authorization header
+        
+        The broker will:
+        1. Validate the PoA token signature and claims
+        2. Query OPA for policy decision
+        3. Proxy to upstream if authorized
+        4. Return 403 if denied with reasons
+      operationId: executeAction
+      tags:
+        - Proxy
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: The action path (e.g., sap/vendor/change)
+          schema:
+            type: string
+        - name: X-Request-ID
+          in: header
+          required: false
+          description: Correlation ID for tracing
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Action-specific payload
+            examples:
+              sapVendorChange:
+                summary: SAP Vendor Change
+                value:
+                  vendor_id: "V12345"
+                  amount: 5000
+                  currency: "USD"
+              crmContactUpdate:
+                summary: CRM Contact Update
+                value:
+                  contact_id: "C98765"
+                  email: "new@example.com"
+      responses:
+        '200':
+          description: Action executed successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: Request correlation ID
+            X-ATB-Risk-Tier:
+              schema:
+                type: string
+                enum: [LOW, MEDIUM, HIGH]
+              description: Risk tier of the action
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Response from upstream backend
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication failed (invalid/missing PoA token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Authorization denied by policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DenialResponse'
+        '502':
+          description: Upstream backend error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: Execute authorized read action
+      description: Same as POST but for read-only operations
+      operationId: executeReadAction
+      tags:
+        - Proxy
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Action executed successfully
+        '403':
+          description: Authorization denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DenialResponse'
+
+components:
+  securitySchemes:
+    mtls:
+      type: mutualTLS
+      description: |
+        mTLS with SPIFFE client certificate.
+        The certificate must contain a SPIFFE ID in the URI SAN field.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Proof-of-Authorization (PoA) JWT token.
+        Must be signed with RS256 and contain required claims.
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        version:
+          type: string
+          example: "1.0.0"
+        uptime:
+          type: string
+          example: "2h30m15s"
+
+    ReadyResponse:
+      type: object
+      required:
+        - ready
+      properties:
+        ready:
+          type: boolean
+        checks:
+          type: object
+          properties:
+            opa:
+              type: boolean
+            upstream:
+              type: boolean
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "upstream connection failed"
+        request_id:
+          type: string
+          format: uuid
+
+    AuthErrorResponse:
+      type: object
+      required:
+        - error
+        - code
+      properties:
+        error:
+          type: string
+          example: "invalid PoA token"
+        code:
+          type: string
+          enum:
+            - TOKEN_MISSING
+            - TOKEN_EXPIRED
+            - TOKEN_INVALID_SIGNATURE
+            - TOKEN_INVALID_CLAIMS
+            - SPIFFE_MISMATCH
+        details:
+          type: string
+
+    DenialResponse:
+      type: object
+      required:
+        - allowed
+        - reasons
+      properties:
+        allowed:
+          type: boolean
+          example: false
+        risk_tier:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        reasons:
+          type: array
+          items:
+            type: string
+          example:
+            - "high-risk action requires dual control"
+            - "missing second approver"
+        request_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          example: "sap.payment.execute"
+
+    PoAToken:
+      type: object
+      description: Proof-of-Authorization JWT claims
+      required:
+        - sub
+        - act
+        - leg
+        - iat
+        - exp
+        - jti
+      properties:
+        sub:
+          type: string
+          description: SPIFFE ID of the agent
+          example: "spiffe://example.org/ns/default/sa/agent/connector"
+        act:
+          type: string
+          description: Action being authorized
+          example: "sap.vendor.change"
+        con:
+          type: object
+          description: Action constraints
+          properties:
+            max_amount:
+              type: number
+            dual_control:
+              type: boolean
+            dataset_allowlist:
+              type: array
+              items:
+                type: string
+        leg:
+          $ref: '#/components/schemas/LegalBasis'
+        iat:
+          type: integer
+          description: Issued at (Unix timestamp)
+        exp:
+          type: integer
+          description: Expiration (Unix timestamp)
+        jti:
+          type: string
+          description: Unique token identifier
+          format: uuid
+
+    LegalBasis:
+      type: object
+      description: Legal basis for the action (GDPR Art. 6)
+      required:
+        - basis
+        - accountable_party
+      properties:
+        basis:
+          type: string
+          enum:
+            - contract
+            - consent
+            - legal_obligation
+            - vital_interests
+            - public_task
+            - legitimate_interests
+        ref:
+          type: string
+          description: Reference to legal document
+        jurisdiction:
+          type: string
+          description: Legal jurisdiction (ISO 3166-1 alpha-2)
+          example: "US"
+        accountable_party:
+          type: object
+          required:
+            - type
+            - id
+          properties:
+            type:
+              type: string
+              enum: [human, system]
+            id:
+              type: string
+              example: "alice@example.com"
+        approval:
+          type: object
+          description: Single approval (for MEDIUM risk)
+          properties:
+            approver:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+        dual_control:
+          type: object
+          description: Dual control (for HIGH risk)
+          properties:
+            approvers:
+              type: array
+              minItems: 2
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+    AuditEvent:
+      type: object
+      description: Audit trail event
+      required:
+        - timestamp
+        - request_id
+        - action
+        - decision
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        request_id:
+          type: string
+          format: uuid
+        spiffe_id:
+          type: string
+        action:
+          type: string
+        decision:
+          type: string
+          enum: [allow, deny]
+        risk_tier:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        reasons:
+          type: array
+          items:
+            type: string
+        accountability:
+          type: object
+          properties:
+            accountable_party:
+              type: string
+            approvers:
+              type: array
+              items:
+                type: string

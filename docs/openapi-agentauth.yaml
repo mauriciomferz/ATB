@@ -1,0 +1,372 @@
+openapi: 3.1.0
+info:
+  title: ATB AgentAuth API
+  description: |
+    AgentAuth service for issuing Proof-of-Authorization (PoA) tokens to AI agents.
+    
+    Agents authenticate via mTLS with SPIFFE certificates and request PoA tokens
+    for specific actions. The service validates the agent's identity and issues
+    short-lived JWT mandates with appropriate constraints.
+  version: 1.0.0
+  contact:
+    name: ATB Team
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://localhost:8444
+    description: Local development
+  - url: https://agentauth.example.com
+    description: Production
+
+security:
+  - mtls: []
+
+tags:
+  - name: Token
+    description: PoA token issuance
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+
+  /v1/token:
+    post:
+      summary: Request PoA token
+      description: |
+        Issues a Proof-of-Authorization token for the specified action.
+        
+        The agent must provide:
+        1. Valid mTLS client certificate with SPIFFE ID
+        2. Requested action and constraints
+        3. Legal basis with accountability chain
+        
+        For MEDIUM and HIGH risk actions, appropriate approvals must be
+        included in the legal basis.
+      operationId: requestToken
+      tags:
+        - Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+            examples:
+              lowRisk:
+                summary: Low-risk action (auto-approved)
+                value:
+                  action: "system.status.read"
+                  legal_basis:
+                    basis: "contract"
+                    jurisdiction: "US"
+                    accountable_party:
+                      type: "human"
+                      id: "alice@example.com"
+              mediumRisk:
+                summary: Medium-risk action (with approval)
+                value:
+                  action: "crm.contact.update"
+                  constraints:
+                    contact_id: "C12345"
+                  legal_basis:
+                    basis: "contract"
+                    jurisdiction: "US"
+                    accountable_party:
+                      type: "human"
+                      id: "alice@example.com"
+                    approval:
+                      approver: "bob@example.com"
+                      timestamp: "2026-01-11T10:00:00Z"
+              highRisk:
+                summary: High-risk action (with dual control)
+                value:
+                  action: "sap.payment.execute"
+                  constraints:
+                    max_amount: 10000
+                  legal_basis:
+                    basis: "contract"
+                    jurisdiction: "US"
+                    accountable_party:
+                      type: "human"
+                      id: "alice@example.com"
+                    dual_control:
+                      approvers:
+                        - id: "bob@example.com"
+                          timestamp: "2026-01-11T10:00:00Z"
+                        - id: "carol@example.com"
+                          timestamp: "2026-01-11T10:05:00Z"
+      responses:
+        '200':
+          description: Token issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingAction:
+                  value:
+                    error: "action is required"
+                    code: "INVALID_REQUEST"
+                invalidConstraints:
+                  value:
+                    error: "constraints.max_amount must be positive"
+                    code: "INVALID_CONSTRAINTS"
+        '401':
+          description: Agent not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Agent not authorized for action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notAuthorized:
+                  value:
+                    error: "agent not authorized for action sap.payment.execute"
+                    code: "NOT_AUTHORIZED"
+                missingApproval:
+                  value:
+                    error: "medium-risk action requires approval"
+                    code: "APPROVAL_REQUIRED"
+                missingDualControl:
+                  value:
+                    error: "high-risk action requires dual control"
+                    code: "DUAL_CONTROL_REQUIRED"
+
+  /v1/token/validate:
+    post:
+      summary: Validate PoA token
+      description: Validates a PoA token without executing any action
+      operationId: validateToken
+      tags:
+        - Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: The PoA JWT to validate
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  claims:
+                    $ref: '#/components/schemas/TokenClaims'
+        '400':
+          description: Token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/actions:
+    get:
+      summary: List available actions
+      description: Returns actions available to the authenticated agent
+      operationId: listActions
+      tags:
+        - Token
+      responses:
+        '200':
+          description: List of available actions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActionInfo'
+
+components:
+  securitySchemes:
+    mtls:
+      type: mutualTLS
+      description: mTLS with SPIFFE client certificate
+
+  schemas:
+    TokenRequest:
+      type: object
+      required:
+        - action
+        - legal_basis
+      properties:
+        action:
+          type: string
+          description: Action to authorize
+          example: "sap.vendor.change"
+        constraints:
+          type: object
+          description: Action-specific constraints
+          additionalProperties: true
+        legal_basis:
+          $ref: '#/components/schemas/LegalBasis'
+        ttl_seconds:
+          type: integer
+          description: Requested token TTL (max 300)
+          default: 300
+          minimum: 1
+          maximum: 300
+
+    TokenResponse:
+      type: object
+      required:
+        - token
+        - expires_at
+      properties:
+        token:
+          type: string
+          description: The PoA JWT
+        expires_at:
+          type: string
+          format: date-time
+          description: Token expiration time
+        claims:
+          $ref: '#/components/schemas/TokenClaims'
+
+    TokenClaims:
+      type: object
+      properties:
+        sub:
+          type: string
+          description: Agent SPIFFE ID
+        act:
+          type: string
+          description: Authorized action
+        con:
+          type: object
+          description: Constraints
+        leg:
+          $ref: '#/components/schemas/LegalBasis'
+        iat:
+          type: integer
+        exp:
+          type: integer
+        jti:
+          type: string
+
+    LegalBasis:
+      type: object
+      required:
+        - basis
+        - accountable_party
+      properties:
+        basis:
+          type: string
+          enum:
+            - contract
+            - consent
+            - legal_obligation
+        jurisdiction:
+          type: string
+        accountable_party:
+          type: object
+          required:
+            - type
+            - id
+          properties:
+            type:
+              type: string
+              enum: [human, system]
+            id:
+              type: string
+        approval:
+          type: object
+          properties:
+            approver:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+        dual_control:
+          type: object
+          properties:
+            approvers:
+              type: array
+              minItems: 2
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+    ActionInfo:
+      type: object
+      properties:
+        action:
+          type: string
+        risk_tier:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        description:
+          type: string
+        required_constraints:
+          type: array
+          items:
+            type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - INVALID_CONSTRAINTS
+            - NOT_AUTHORIZED
+            - APPROVAL_REQUIRED
+            - DUAL_CONTROL_REQUIRED
+            - TOKEN_EXPIRED
+            - TOKEN_INVALID
+        details:
+          type: string
