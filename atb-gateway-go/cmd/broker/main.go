@@ -21,7 +21,23 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+var (
+	brokerRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "atb_broker_requests_total",
+			Help: "Total number of brokered requests handled by the gateway.",
+		},
+		[]string{"decision", "action"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(brokerRequestsTotal)
+}
 
 type PoAClaims struct {
 	Act string                 `json:"act"`
@@ -103,6 +119,34 @@ func mustParseURL(raw string) *url.URL {
 		log.Fatalf("invalid URL %q: %v", raw, err)
 	}
 	return u
+}
+
+func deriveOPAHealthURL(opaDecisionURL string) string {
+	u, err := url.Parse(strings.TrimSpace(opaDecisionURL))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "http://localhost:8181/health"
+	}
+	u.Path = "/health"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
+}
+
+func checkHTTPHealth(ctx context.Context, client *http.Client, healthURL string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("health check status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	return nil
 }
 
 func envInt64(name string, def int64) int64 {
@@ -251,6 +295,10 @@ func main() {
 	if listenAddr == "" {
 		listenAddr = ":8443"
 	}
+	httpListenAddr := strings.TrimSpace(os.Getenv("HTTP_LISTEN_ADDR"))
+	if httpListenAddr == "" {
+		httpListenAddr = ":8080"
+	}
 	certFile := strings.TrimSpace(os.Getenv("TLS_CERT_FILE"))
 	keyFile := strings.TrimSpace(os.Getenv("TLS_KEY_FILE"))
 	if certFile == "" || keyFile == "" {
@@ -259,13 +307,20 @@ func main() {
 
 	maxTTLSec := envInt64("POA_MAX_TTL_SECONDS", 300)
 	verifyKey, allowedAlgs, err := loadVerifyKey()
+	authConfigured := true
 	if err != nil {
-		log.Fatalf("PoA verification key error: %v", err)
+		authConfigured = false
+		log.Printf("WARN: PoA verification not configured; gateway will deny protected requests (%v)", err)
 	}
 
 	targetURL := mustParseURL(upstream)
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
-	opa := &OPAClient{URL: opaURL, HTTP: &http.Client{Timeout: 1500 * time.Millisecond}}
+	httpClient := &http.Client{Timeout: 1500 * time.Millisecond}
+	opa := &OPAClient{URL: opaURL, HTTP: httpClient}
+	opaHealthURL := strings.TrimSpace(os.Getenv("OPA_HEALTH_URL"))
+	if opaHealthURL == "" {
+		opaHealthURL = deriveOPAHealthURL(opaURL)
+	}
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now().UTC()
@@ -273,7 +328,15 @@ func main() {
 
 		agentSPIFFE, err := peerSPIFFEIDFromVerifiedCert(r)
 		if err != nil {
+			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
 			http.Error(w, "mTLS client cert with SPIFFE ID required", http.StatusUnauthorized)
+			return
+		}
+
+		if !authConfigured {
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "poa_verification_not_configured", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
+			http.Error(w, "authorization not configured", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -283,6 +346,7 @@ func main() {
 		}
 		if poaToken == "" {
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "missing_poa", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
 			http.Error(w, "missing PoA token", http.StatusUnauthorized)
 			return
 		}
@@ -290,12 +354,14 @@ func main() {
 		claims, err := verifyPoAJWT(poaToken, maxTTLSec, verifyKey, allowedAlgs)
 		if err != nil {
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "poa_invalid:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
 			http.Error(w, "invalid PoA", http.StatusForbidden)
 			return
 		}
 
 		if claims.Subject != agentSPIFFE {
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "sub_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "PoA subject mismatch", http.StatusForbidden)
 			return
 		}
@@ -311,6 +377,7 @@ func main() {
 
 		if ok, why := semanticGuardrails(params); !ok {
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: why, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "blocked by semantic firewall", http.StatusForbidden)
 			return
 		}
@@ -337,6 +404,7 @@ func main() {
 		allow, reason, err := opa.Decide(r.Context(), input)
 		if err != nil {
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "error", Reason: "opa_error:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("error", claims.Act).Inc()
 			http.Error(w, "policy evaluation error", http.StatusInternalServerError)
 			return
 		}
@@ -345,15 +413,34 @@ func main() {
 				reason = "policy_denied"
 			}
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "policy denied", http.StatusForbidden)
 			return
 		}
 
 		audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "allow", Reason: "policy_allow", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+		brokerRequestsTotal.WithLabelValues("allow", claims.Act).Inc()
 		proxy.ServeHTTP(w, r)
 	})
 
-	server := &http.Server{
+	healthMux := http.NewServeMux()
+	healthMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	healthMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 1200*time.Millisecond)
+		defer cancel()
+		if err := checkHTTPHealth(ctx, httpClient, opaHealthURL); err != nil {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("ready\n"))
+	})
+	healthMux.Handle("/metrics", promhttp.Handler())
+
+	mtlsServer := &http.Server{
 		Addr:              listenAddr,
 		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -363,6 +450,22 @@ func main() {
 		},
 	}
 
-	log.Printf("ATB Broker Gateway listening on %s -> %s", listenAddr, targetURL.String())
-	log.Fatal(server.ListenAndServeTLS(certFile, keyFile))
+	httpServer := &http.Server{
+		Addr:              httpListenAddr,
+		Handler:           healthMux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	errCh := make(chan error, 2)
+
+	go func() {
+		log.Printf("ATB Broker health listening on %s", httpListenAddr)
+		errCh <- httpServer.ListenAndServe()
+	}()
+	go func() {
+		log.Printf("ATB Broker Gateway listening on %s -> %s", listenAddr, targetURL.String())
+		errCh <- mtlsServer.ListenAndServeTLS(certFile, keyFile)
+	}()
+
+	log.Fatal(<-errCh)
 }

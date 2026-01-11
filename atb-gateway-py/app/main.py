@@ -15,8 +15,68 @@ POA_VERIFY_PUBKEY_PEM = os.environ.get("POA_VERIFY_PUBKEY_PEM", "")
 POA_MAX_TTL_SECONDS = int(os.environ.get("POA_MAX_TTL_SECONDS", "300"))
 
 
+@app.get("/health", include_in_schema=False)
+async def health() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/ready", include_in_schema=False)
+async def ready() -> Dict[str, str]:
+    # Keep readiness lightweight: ensure OPA is reachable.
+    health_url = OPA_DECISION_URL
+    try:
+        # Best-effort derive OPA base health URL.
+        if "/v1/" in health_url:
+            health_url = health_url.split("/v1/", 1)[0] + "/health"
+        else:
+            health_url = health_url.rstrip("/") + "/health"
+        r = requests.get(health_url, timeout=1.0)
+        r.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Not ready: {e}")
+
+    return {"status": "ready"}
+
+
 def audit(event: Dict[str, Any]) -> None:
     print(json.dumps(event, separators=(",", ":")))
+
+
+def now_rfc3339() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def audit_event(
+    *,
+    request_id: Optional[str],
+    poa_jti: Optional[str],
+    agent_identity: str,
+    action: Optional[str],
+    constraints: Optional[Dict[str, Any]],
+    decision: str,
+    reason: str,
+    method: str,
+    path: str,
+    target_service: str,
+) -> Dict[str, Any]:
+    ev: Dict[str, Any] = {
+        "ts": now_rfc3339(),
+        "agent_identity": agent_identity,
+        "decision": decision,
+        "reason": reason,
+        "target_service": target_service,
+        "method": method,
+        "path": path,
+    }
+    if request_id:
+        ev["request_id"] = request_id
+    if poa_jti:
+        ev["poa_jti"] = poa_jti
+    if action:
+        ev["action"] = action
+    if constraints:
+        ev["constraints"] = constraints
+    return ev
 
 
 def extract_agent_spiffe_id(
@@ -81,7 +141,7 @@ def opa_decide(payload: Dict[str, Any]) -> Tuple[bool, str]:
     raise HTTPException(status_code=500, detail="OPA returned unexpected result")
 
 
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
 async def broker(
     request: Request,
     path: str,
@@ -90,8 +150,9 @@ async def broker(
     x_request_id: Optional[str] = Header(default=None),
     x_spiffe_id: Optional[str] = Header(default=None),
 ):
-    start = int(time.time())
     agent_spiffe = extract_agent_spiffe_id(x_spiffe_id)
+
+    req_path = "/" + path
 
     token = ""
     if authorization and authorization.lower().startswith("bearer "):
@@ -99,12 +160,38 @@ async def broker(
     if not token and x_poa_token:
         token = x_poa_token.strip()
     if not token:
-        audit({"ts": start, "request_id": x_request_id, "agent_identity": agent_spiffe, "decision": "deny", "reason": "missing_poa"})
+        audit(
+            audit_event(
+                request_id=x_request_id,
+                poa_jti=None,
+                agent_identity=agent_spiffe,
+                action=None,
+                constraints=None,
+                decision="deny",
+                reason="missing_poa",
+                method=request.method,
+                path=req_path,
+                target_service=UPSTREAM_URL,
+            )
+        )
         raise HTTPException(status_code=401, detail="Missing PoA")
 
     claims = verify_poa_jwt(token)
     if claims.get("sub") != agent_spiffe:
-        audit({"ts": start, "request_id": x_request_id, "poa_jti": claims.get("jti"), "agent_identity": agent_spiffe, "decision": "deny", "reason": "sub_mismatch"})
+        audit(
+            audit_event(
+                request_id=x_request_id,
+                poa_jti=str(claims.get("jti")),
+                agent_identity=agent_spiffe,
+                action=str(claims.get("act")),
+                constraints=claims.get("con"),
+                decision="deny",
+                reason="sub_mismatch",
+                method=request.method,
+                path=req_path,
+                target_service=UPSTREAM_URL,
+            )
+        )
         raise HTTPException(status_code=403, detail="PoA subject mismatch")
 
     body = await request.body()
@@ -117,7 +204,20 @@ async def broker(
 
     ok, why = semantic_guardrails(params)
     if not ok:
-        audit({"ts": start, "request_id": x_request_id, "poa_jti": claims.get("jti"), "agent_identity": agent_spiffe, "action": claims.get("act"), "decision": "deny", "reason": why})
+        audit(
+            audit_event(
+                request_id=x_request_id,
+                poa_jti=str(claims.get("jti")),
+                agent_identity=agent_spiffe,
+                action=str(claims.get("act")),
+                constraints=claims.get("con"),
+                decision="deny",
+                reason=why,
+                method=request.method,
+                path=req_path,
+                target_service=UPSTREAM_URL,
+            )
+        )
         raise HTTPException(status_code=403, detail="Blocked by semantic firewall")
 
     opa_input = {
@@ -137,10 +237,36 @@ async def broker(
 
     allow, reason = opa_decide(opa_input)
     if not allow:
-        audit({"ts": start, "request_id": x_request_id, "poa_jti": claims.get("jti"), "agent_identity": agent_spiffe, "action": claims.get("act"), "decision": "deny", "reason": reason or "policy_denied"})
+        audit(
+            audit_event(
+                request_id=x_request_id,
+                poa_jti=str(claims.get("jti")),
+                agent_identity=agent_spiffe,
+                action=str(claims.get("act")),
+                constraints=claims.get("con"),
+                decision="deny",
+                reason=reason or "policy_denied",
+                method=request.method,
+                path=req_path,
+                target_service=UPSTREAM_URL,
+            )
+        )
         raise HTTPException(status_code=403, detail="Policy denied")
 
-    audit({"ts": start, "request_id": x_request_id, "poa_jti": claims.get("jti"), "agent_identity": agent_spiffe, "action": claims.get("act"), "decision": "allow", "reason": "policy_allow"})
+    audit(
+        audit_event(
+            request_id=x_request_id,
+            poa_jti=str(claims.get("jti")),
+            agent_identity=agent_spiffe,
+            action=str(claims.get("act")),
+            constraints=claims.get("con"),
+            decision="allow",
+            reason="policy_allow",
+            method=request.method,
+            path=req_path,
+            target_service=UPSTREAM_URL,
+        )
+    )
 
     # Minimal proxy: forward request to upstream. Production should enforce strict egress allowlists,
     # timeouts, and per-connector request shaping.

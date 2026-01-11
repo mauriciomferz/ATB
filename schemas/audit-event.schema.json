@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/atb/schemas/audit-event.schema.json",
+  "title": "ATB Audit Event",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "ts",
+    "agent_identity",
+    "decision",
+    "reason",
+    "target_service",
+    "method",
+    "path"
+  ],
+  "properties": {
+    "ts": {
+      "description": "Event timestamp in RFC3339 UTC.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "request_id": {
+      "description": "Request correlation ID propagated from the caller.",
+      "type": "string",
+      "minLength": 1
+    },
+    "poa_jti": {
+      "description": "PoA mandate ID (JWT jti).",
+      "type": "string",
+      "minLength": 1
+    },
+    "agent_identity": {
+      "description": "Authenticated agent identity (e.g., SPIFFE ID).",
+      "type": "string",
+      "minLength": 1
+    },
+    "action": {
+      "description": "Requested action scope (AAP-001 act claim).",
+      "type": "string"
+    },
+    "constraints": {
+      "description": "Constraints from AAP-001 con claim.",
+      "type": "object"
+    },
+    "decision": {
+      "description": "Authorization decision.",
+      "type": "string",
+      "enum": ["allow", "deny", "error"]
+    },
+    "reason": {
+      "description": "Machine-readable reason code (and/or short description).",
+      "type": "string",
+      "minLength": 1
+    },
+    "target_service": {
+      "description": "Upstream target that the broker is calling.",
+      "type": "string",
+      "minLength": 1
+    },
+    "method": {
+      "description": "HTTP method.",
+      "type": "string",
+      "minLength": 1
+    },
+    "path": {
+      "description": "HTTP request path.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

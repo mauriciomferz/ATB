@@ -31,6 +31,8 @@ spec:
               value: {{ .Values.broker.env.UPSTREAM_URL | quote }}
             - name: OPA_DECISION_URL
               value: {{ tpl .Values.broker.env.OPA_DECISION_URL . | quote }}
+            - name: HTTP_LISTEN_ADDR
+              value: ":{{ .Values.broker.service.httpPort }}"
             - name: POA_MAX_TTL_SECONDS
               value: {{ .Values.broker.env.POA_MAX_TTL_SECONDS | quote }}
             - name: POA_VERIFY_PUBKEY_PEM
