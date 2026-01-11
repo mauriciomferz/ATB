@@ -133,6 +133,7 @@ logs/
 *.p12
 *.pfx
 secrets/
+!**/secrets/README.md
 *.secret
 .env.local
 .env.*.local
