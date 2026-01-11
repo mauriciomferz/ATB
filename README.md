@@ -1,5 +1,11 @@
 # Agent Trust Broker (ATB)
 
+[![CI](https://github.com/mauriciomferz/ATB/actions/workflows/ci.yaml/badge.svg)](https://github.com/mauriciomferz/ATB/actions/workflows/ci.yaml)
+[![Deploy](https://github.com/mauriciomferz/ATB/actions/workflows/deploy-atb.yaml/badge.svg)](https://github.com/mauriciomferz/ATB/actions/workflows/deploy-atb.yaml)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev/)
+[![OPA](https://img.shields.io/badge/OPA-Policy-7D9AAA?logo=openpolicyagent)](https://www.openpolicyagent.org/)
+[![License](https://img.shields.io/badge/License-Proprietary-red)]()
+
 A security enforcement layer for enterprise AI agent deployments, implementing the **AI Safe Enterprise Autonomy Architecture**.
 
 ## Overview

@@ -1,0 +1,24 @@
+# Code Owners for ATB Repository
+# These owners will be automatically requested for review on PRs
+
+# Default owners for everything
+* @mauriciomferz
+
+# OPA Policy changes require security review
+/opa/ @mauriciomferz
+/opa/policy/*.rego @mauriciomferz
+
+# Helm chart changes
+/charts/ @mauriciomferz
+
+# Go gateway code
+/atb-gateway-go/ @mauriciomferz
+
+# Security-sensitive files
+/SECURITY.md @mauriciomferz
+/.github/workflows/ @mauriciomferz
+
+# Documentation
+/docs/ @mauriciomferz
+/README.md @mauriciomferz
+/CONTRIBUTING.md @mauriciomferz
