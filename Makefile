@@ -231,6 +231,16 @@ docker-logs:
 	docker compose logs -f
 
 # ============================================================================
+# E2E Testing & Demo
+# ============================================================================
+
+demo: ## Run interactive demo showing risk tiers (requires OPA running)
+	@./dev/demo.sh
+
+test-e2e: ## Run end-to-end tests (requires OPA running)
+	@./dev/test_e2e.sh
+
+# ============================================================================
 # Cleanup
 # ============================================================================
 

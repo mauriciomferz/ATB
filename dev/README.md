@@ -168,3 +168,43 @@ curl -vk https://127.0.0.1:8443/sap/vendor/change \
 - Same request but `dual_control: false` + `amount: 6000` should deny.
 - For Salesforce bulk export, try:
   - `act=salesforce.bulk.export`, `con.dataset_allowlist=["accounts"]`, `params.dataset="accounts"`, `row_count=5000`.
+
+## 6) Demo and E2E Testing
+
+### Interactive Demo
+
+Run an interactive demo that shows how different risk tiers are handled:
+
+```bash
+# Start OPA first
+make run-opa  # or make docker-up-minimal
+
+# In another terminal, run the demo
+make demo
+```
+
+The demo will show:
+
+- **LOW** risk actions (health checks) - allowed without approval
+- **MEDIUM** risk actions (CRM updates) - require single approver
+- **HIGH** risk actions (SAP payments) - require dual control
+
+### End-to-End Tests
+
+Run automated E2E tests against a running OPA instance:
+
+```bash
+# Start OPA first
+make run-opa  # or make docker-up-minimal
+
+# In another terminal, run E2E tests
+make test-e2e
+```
+
+This tests various policy scenarios including:
+
+- Low-risk safe paths (health check)
+- Low-risk actions with valid PoA
+- Medium-risk actions with/without approval
+- High-risk actions with/without dual control
+- Missing legal basis validation
