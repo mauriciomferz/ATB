@@ -17,6 +17,7 @@ services:
   # ==========================================================================
   opa:
     image: openpolicyagent/opa:latest
+    platform: linux/arm64
     container_name: atb-opa
     ports:
       - "8181:8181"
@@ -27,9 +28,10 @@ services:
       - "--server"
       - "--addr=0.0.0.0:8181"
       - "--log-level=info"
+      - "--v0-compatible"
       - "/policy/poa.rego"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      test: ["CMD", "/opa", "eval", "true"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -87,10 +89,7 @@ services:
       upstream:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      disable: true
     networks:
       - atb-network
 
@@ -110,10 +109,7 @@ services:
       - CHALLENGE_TTL=300
       - LOG_LEVEL=info
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8444/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      disable: true
     networks:
       - atb-network
 

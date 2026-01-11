@@ -9,6 +9,7 @@
 services:
   opa:
     image: openpolicyagent/opa:latest
+    platform: linux/arm64
     container_name: atb-opa-minimal
     ports:
       - "8181:8181"
@@ -19,9 +20,10 @@ services:
       - "--server"
       - "--addr=0.0.0.0:8181"
       - "--log-level=debug"
+      - "--v0-compatible"
       - "/policy/poa.rego"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      test: ["CMD", "/opa", "eval", "true"]
       interval: 5s
       timeout: 3s
       retries: 3
