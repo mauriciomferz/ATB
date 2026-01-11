@@ -25,14 +25,13 @@ Please be respectful and professional in all interactions.
 git clone https://github.com/mauriciomferz/ATB.git
 cd ATB
 
-# Run the setup target (installs all dependencies)
-make setup
+# One-command setup (checks prerequisites, installs deps, runs tests)
+make quickstart
 
-# Generate local development certificates
-make certs
-
-# Run all tests
-make test
+# Or step-by-step:
+make setup    # Install dependencies
+make certs    # Generate dev certificates
+make test     # Run all tests
 ```
 
 #### Manual Setup
