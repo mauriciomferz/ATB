@@ -37,9 +37,23 @@ spec:
             - name: CHALLENGE_TTL_SECONDS
               value: {{ .Values.agentauth.env.CHALLENGE_TTL_SECONDS | quote }}
             - name: APPROVAL_SHARED_SECRET
+              {{- if .Values.agentauth.secrets.approvalSharedSecret.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentauth.secrets.approvalSharedSecret.name | quote }}
+                  key: {{ .Values.agentauth.secrets.approvalSharedSecret.key | quote }}
+              {{- else }}
               value: {{ .Values.agentauth.env.APPROVAL_SHARED_SECRET | quote }}
+              {{- end }}
             - name: POA_SIGNING_ED25519_PRIVKEY_PEM
+              {{- if .Values.agentauth.secrets.signingKey.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentauth.secrets.signingKey.name | quote }}
+                  key: {{ .Values.agentauth.secrets.signingKey.key | quote }}
+              {{- else }}
               value: {{ .Values.agentauth.env.POA_SIGNING_ED25519_PRIVKEY_PEM | quote }}
+              {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.agentauth.service.port }}

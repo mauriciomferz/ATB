@@ -17,3 +17,7 @@ This chart deploys:
 	- Secret-less (`broker.tls.mode=spiffe`): no TLS secret is mounted; broker must receive `SPIFFE_ENDPOINT_SOCKET` (typically via CSI driver).
 - CSI integration is enabled via `csi.enabled=true` (requires SPIFFE CSI Driver installed).
 - This chart is intentionally minimal; tailor NetworkPolicies, PodSecurity, and key management for production.
+
+## Kubernetes quickstart
+
+See [docs/k8s-quickstart.md](../../docs/k8s-quickstart.md) for an end-to-end walkthrough (SPIRE + CSI + Helm + registration).

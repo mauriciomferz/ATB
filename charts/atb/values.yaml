@@ -81,6 +81,14 @@ agentauth:
     APPROVAL_SHARED_SECRET: ""
     # Optional: Ed25519 signing key (PKCS8 PEM). Leave empty for ephemeral dev key.
     POA_SIGNING_ED25519_PRIVKEY_PEM: ""
+  secrets:
+    # If set, these override the corresponding plaintext env vars above.
+    approvalSharedSecret:
+      name: ""
+      key: "approval_shared_secret"
+    signingKey:
+      name: ""
+      key: "ed25519_privkey_pem"
   resources: {}
 
 policy:
