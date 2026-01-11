@@ -84,19 +84,32 @@ Requestor → Open issue: "Add connector: <system>"
 
 ### Risk-Tiered Actions (in OPA policy)
 
-**Medium-Risk Actions** (`medium_risk_actions`):
-- `crm.contact.update`, `crm.lead.create`
-- `erp.order.create`, `erp.order.update`
-- `hr.employee.view_limited`
-- `support.ticket.create`, `support.ticket.update`
-- `inventory.stock.adjust`, `catalog.product.update`
+> **Full catalog:** See [`docs/enterprise-actions.md`](enterprise-actions.md) for complete action reference with constraint rules.
 
-**High-Risk Actions** (`high_risk_actions`):
-- `sap.vendor.change`, `sap.payment.execute`, `erp.payment.process`
-- `salesforce.bulk.export`, `salesforce.bulk.delete`, `crm.contacts.bulk_delete`
-- `hr.employee.export_pii`, `customer.data.export`
-- `iam.role.assign`, `iam.permission.grant`
-- `ot.system.manual_override`, `scada.setpoint.change`
+**Medium-Risk Actions** (`medium_risk_actions`) — 40+ actions including:
+- **CRM:** `crm.contact.update`, `crm.lead.create`, `crm.opportunity.update`
+- **ERP:** `erp.order.create`, `erp.order.cancel`, `erp.invoice.create`
+- **HR:** `hr.employee.view_limited`, `hr.timesheet.approve`, `hr.leave.approve`
+- **Support:** `support.ticket.create`, `support.ticket.escalate`
+- **Inventory:** `inventory.stock.adjust`, `inventory.transfer.create`
+- **Marketing:** `marketing.campaign.launch`, `marketing.email.send_batch`
+
+**High-Risk Actions** (`high_risk_actions`) — 60+ actions including:
+- **SAP:** `sap.vendor.change`, `sap.payment.execute`, `sap.journal_entry.post`
+- **Salesforce:** `salesforce.bulk.export`, `salesforce.apex.execute`
+- **HR/PII:** `hr.employee.export_pii`, `hr.payroll.run`, `hr.compensation.change`
+- **Customer:** `customer.gdpr.erasure`, `customer.ccpa.export`, `customer.pii.access`
+- **IAM:** `iam.role.assign`, `iam.mfa.disable`, `azure.ad.role_assign`
+- **Cloud:** `aws.iam.policy_attach`, `azure.rbac.assign`, `azure.keyvault.secret_set`
+- **OT/SCADA:** `ot.system.manual_override`, `scada.setpoint.change`, `ot.safety.interlock_bypass`
+- **ServiceNow:** `servicenow.change.emergency_approve`, `servicenow.incident.priority1_create`
+
+**Low-Risk Allowlist** (`low_risk_allowlist`) — 45+ read-only actions:
+- **CRM reads:** `crm.contact.read`, `crm.lead.list`, `crm.opportunity.read`
+- **ERP reads:** `erp.order.read`, `erp.invoice.read`, `erp.vendor.read`
+- **Catalog:** `catalog.product.read`, `catalog.category.list`
+- **Support:** `support.ticket.read`, `support.kb.search`
+- **Reporting:** `reporting.dashboard.view`, `analytics.dashboard.view`
 
 ### Example `leg` Claims by Tier
 
