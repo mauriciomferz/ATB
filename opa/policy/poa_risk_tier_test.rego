@@ -25,12 +25,12 @@ medium_risk_base := {
 	"policy": {"max_ttl_seconds": 300}
 }
 
-# Base input for a high-risk action (salesforce.bulk.export)
+# Base input for a high-risk action (sap.vendor.create - no constraint-specific rules)
 high_risk_base := {
 	"agent": {"spiffe_id": "spiffe://atb.example/agent/export-agent"},
 	"poa": {
 		"sub": "spiffe://atb.example/agent/export-agent",
-		"act": "salesforce.bulk.export",
+		"act": "sap.vendor.create",
 		"con": {},
 		"leg": {
 			"jurisdiction": "EU",
@@ -47,7 +47,7 @@ high_risk_base := {
 		"exp": 1700000300,
 		"jti": "high-risk-001"
 	},
-	"request": {"method": "POST", "path": "/sf/bulk", "action": "salesforce.bulk.export", "params": {}},
+	"request": {"method": "POST", "path": "/sap/vendor", "action": "sap.vendor.create", "params": {}},
 	"policy": {"max_ttl_seconds": 300}
 }
 
