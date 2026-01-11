@@ -148,6 +148,70 @@ The policy engine enforces:
 opa test opa/policy/ -v --v0-compatible
 ```
 
+## Development
+
+### Quick Start for Developers
+
+```bash
+# One-command setup
+make quickstart
+
+# Or use the developer CLI
+./scripts/atb.sh start
+./scripts/atb.sh status
+./scripts/atb.sh test opa
+```
+
+### Developer CLI
+
+The `atb` CLI provides commands for common development tasks:
+
+```bash
+./scripts/atb.sh start          # Start local stack
+./scripts/atb.sh stop           # Stop services
+./scripts/atb.sh status         # Check service health
+./scripts/atb.sh logs [service] # View logs
+./scripts/atb.sh test [type]    # Run tests (opa, go, e2e, all)
+./scripts/atb.sh query read:logs # Query OPA policy
+./scripts/atb.sh demo           # Interactive demo
+./scripts/atb.sh validate       # Validate all configs
+```
+
+### Make Targets
+
+```bash
+make help              # Show all available commands
+make setup             # Install dependencies
+make test              # Run all tests
+make docker-up         # Start full stack
+make demo              # Interactive risk tier demo
+make validate          # Validate all configurations
+make load-test         # Run k6 load tests
+make docs              # Generate API documentation
+```
+
+### Project Structure
+
+```
+├── atb-gateway-go/    # Go services (broker, agentauth)
+├── atb-gateway-py/    # Python gateway (alternative)
+├── charts/atb/        # Helm chart
+├── config/            # Example configurations
+├── deploy/            # Deployment manifests
+│   ├── grafana/       # Grafana dashboards
+│   ├── k8s/           # Kubernetes manifests
+│   └── prometheus/    # Alerting rules
+├── dev/               # Development tools
+├── docs/              # Documentation
+├── examples/          # Client examples
+├── opa/policy/        # OPA policies
+├── schemas/           # JSON schemas
+├── scripts/           # Utility scripts
+├── sdk/               # SDK documentation
+├── spire/             # SPIRE configuration
+└── tests/load/        # k6 load tests
+```
+
 ## CI/CD
 
 The GitHub Actions workflow includes:

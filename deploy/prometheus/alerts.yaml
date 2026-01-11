@@ -1,0 +1,196 @@
+# ATB Prometheus Alerting Rules
+# =============================
+# Import into Prometheus or use with Alertmanager
+
+groups:
+  - name: atb-availability
+    interval: 30s
+    rules:
+      - alert: ATBBrokerDown
+        expr: up{job="atb-broker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: atb
+        annotations:
+          summary: "ATB Broker is down"
+          description: "ATB Broker instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: ATBOPADown
+        expr: up{job="atb-opa"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: atb
+        annotations:
+          summary: "ATB OPA is down"
+          description: "OPA instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: ATBAgentAuthDown
+        expr: up{job="atb-agentauth"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: atb
+        annotations:
+          summary: "ATB AgentAuth is down"
+          description: "AgentAuth instance {{ $labels.instance }} has been down for more than 1 minute."
+
+  - name: atb-latency
+    interval: 30s
+    rules:
+      - alert: ATBHighLatency
+        expr: histogram_quantile(0.95, sum(rate(atb_broker_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "ATB Broker high latency"
+          description: "95th percentile latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+
+      - alert: ATBCriticalLatency
+        expr: histogram_quantile(0.99, sum(rate(atb_broker_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: critical
+          service: atb
+        annotations:
+          summary: "ATB Broker critical latency"
+          description: "99th percentile latency is {{ $value | humanizeDuration }} (threshold: 1s)"
+
+      - alert: OPAHighLatency
+        expr: histogram_quantile(0.95, sum(rate(opa_request_duration_seconds_bucket[5m])) by (le)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "OPA policy evaluation high latency"
+          description: "95th percentile OPA latency is {{ $value | humanizeDuration }} (threshold: 100ms)"
+
+  - name: atb-errors
+    interval: 30s
+    rules:
+      - alert: ATBHighErrorRate
+        expr: |
+          sum(rate(atb_broker_requests_total{status=~"5.."}[5m])) 
+          / sum(rate(atb_broker_requests_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "ATB Broker high error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 1%)"
+
+      - alert: ATBCriticalErrorRate
+        expr: |
+          sum(rate(atb_broker_requests_total{status=~"5.."}[5m])) 
+          / sum(rate(atb_broker_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: atb
+        annotations:
+          summary: "ATB Broker critical error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      - alert: ATBAuthorizationDenialSpike
+        expr: |
+          sum(rate(atb_broker_authorization_decisions_total{decision="deny"}[5m])) 
+          / sum(rate(atb_broker_authorization_decisions_total[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "High authorization denial rate"
+          description: "{{ $value | humanizePercentage }} of authorization requests are being denied"
+
+  - name: atb-approvals
+    interval: 60s
+    rules:
+      - alert: ATBPendingApprovalsHigh
+        expr: sum(atb_broker_pending_approvals) > 50
+        for: 15m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "High number of pending approvals"
+          description: "{{ $value }} approvals are pending (threshold: 50)"
+
+      - alert: ATBApprovalWaitTimeHigh
+        expr: avg(atb_broker_approval_wait_time_seconds) > 600
+        for: 15m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "High approval wait time"
+          description: "Average approval wait time is {{ $value | humanizeDuration }} (threshold: 10m)"
+
+      - alert: ATBApprovalExpirationRate
+        expr: |
+          sum(rate(atb_broker_approvals_total{status="expired"}[1h])) 
+          / sum(rate(atb_broker_approvals_total[1h])) > 0.1
+        for: 30m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "High approval expiration rate"
+          description: "{{ $value | humanizePercentage }} of approvals are expiring without action"
+
+  - name: atb-security
+    interval: 60s
+    rules:
+      - alert: ATBHighRiskActionsSpike
+        expr: |
+          sum(rate(atb_broker_authorization_decisions_total{risk_tier="HIGH"}[15m])) 
+          > sum(rate(atb_broker_authorization_decisions_total{risk_tier="HIGH"}[1h] offset 1d)) * 2
+        for: 15m
+        labels:
+          severity: warning
+          service: atb
+          security: true
+        annotations:
+          summary: "Spike in HIGH risk actions"
+          description: "HIGH risk actions are 2x higher than same time yesterday"
+
+      - alert: ATBUnusualAgentActivity
+        expr: |
+          count(count by (agent_id) (rate(atb_broker_authorization_decisions_total[1h]) > 0)) 
+          > count(count by (agent_id) (rate(atb_broker_authorization_decisions_total[1h] offset 1d) > 0)) * 1.5
+        for: 30m
+        labels:
+          severity: info
+          service: atb
+          security: true
+        annotations:
+          summary: "Unusual number of active agents"
+          description: "50% more agents are active than same time yesterday"
+
+  - name: atb-resources
+    interval: 60s
+    rules:
+      - alert: OPAHighMemory
+        expr: process_resident_memory_bytes{job="atb-opa"} > 1073741824
+        for: 10m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "OPA high memory usage"
+          description: "OPA is using {{ $value | humanize1024 }}B of memory (threshold: 1GB)"
+
+      - alert: ATBBrokerHighMemory
+        expr: process_resident_memory_bytes{job="atb-broker"} > 536870912
+        for: 10m
+        labels:
+          severity: warning
+          service: atb
+        annotations:
+          summary: "ATB Broker high memory usage"
+          description: "Broker is using {{ $value | humanize1024 }}B of memory (threshold: 512MB)"
