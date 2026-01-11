@@ -120,6 +120,13 @@ observability:
       enabled: false
       interval: 30s
       scrapeTimeout: 10s
+    # PrometheusRule for SLO alerts (requires prometheus-operator CRDs)
+    rules:
+      enabled: false
+      # Labels to add to PrometheusRule for Prometheus selector
+      additionalLabels: {}
+      # SLO target for broker availability (0.999 = 99.9%)
+      brokerAvailabilitySLO: 0.999
   otel:
     enabled: false
     endpoint: "http://otel-collector.monitoring.svc.cluster.local:4318"

@@ -1,0 +1,170 @@
+{{- if .Values.observability.prometheus.rules.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-atb-alerts
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: atb
+    release: {{ .Release.Name }}
+    {{- with .Values.observability.prometheus.rules.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: atb.availability
+      interval: 30s
+      rules:
+        # SLO: Broker should be available 99.9% of the time
+        - alert: ATBBrokerDown
+          expr: up{job="{{ .Release.Name }}-broker"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: atb-broker
+          annotations:
+            summary: "ATB Broker is down"
+            description: "ATB Broker {{ "{{ $labels.instance }}" }} has been down for more than 1 minute."
+            runbook_url: "https://github.com/mauriciomferz/ATB/wiki/Runbooks#atb-broker-down"
+
+        - alert: ATBBrokerHighErrorRate
+          expr: |
+            (
+              sum(rate(atb_broker_requests_total{decision="error"}[5m])) by (job)
+              /
+              sum(rate(atb_broker_requests_total[5m])) by (job)
+            ) > 0.01
+          for: 5m
+          labels:
+            severity: warning
+            service: atb-broker
+          annotations:
+            summary: "ATB Broker error rate > 1%"
+            description: "ATB Broker error rate is {{ "{{ $value | humanizePercentage }}" }} over the last 5 minutes."
+
+        - alert: ATBBrokerHighDenyRate
+          expr: |
+            (
+              sum(rate(atb_broker_requests_total{decision="deny"}[5m])) by (job)
+              /
+              sum(rate(atb_broker_requests_total[5m])) by (job)
+            ) > 0.20
+          for: 10m
+          labels:
+            severity: warning
+            service: atb-broker
+          annotations:
+            summary: "ATB Broker deny rate > 20%"
+            description: "ATB Broker deny rate is {{ "{{ $value | humanizePercentage }}" }} over the last 5 minutes. Check for misconfigured agents or policy issues."
+
+        # OPA availability
+        - alert: ATBOPADown
+          expr: up{job="{{ .Release.Name }}-opa"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: atb-opa
+          annotations:
+            summary: "ATB OPA is down"
+            description: "ATB OPA {{ "{{ $labels.instance }}" }} has been down for more than 1 minute."
+            runbook_url: "https://github.com/mauriciomferz/ATB/wiki/Runbooks#atb-opa-down"
+
+        - alert: ATBOPAHighLatency
+          expr: |
+            histogram_quantile(0.99, 
+              sum(rate(http_request_duration_seconds_bucket{job="{{ .Release.Name }}-opa"}[5m])) by (le, job)
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            service: atb-opa
+          annotations:
+            summary: "ATB OPA p99 latency > 500ms"
+            description: "ATB OPA p99 latency is {{ "{{ $value | humanizeDuration }}" }}."
+
+        # AgentAuth availability
+        - alert: ATBAgentAuthDown
+          expr: up{job="{{ .Release.Name }}-agentauth"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: atb-agentauth
+          annotations:
+            summary: "ATB AgentAuth is down"
+            description: "ATB AgentAuth {{ "{{ $labels.instance }}" }} has been down for more than 1 minute."
+            runbook_url: "https://github.com/mauriciomferz/ATB/wiki/Runbooks#atb-agentauth-down"
+
+    - name: atb.slo
+      interval: 1m
+      rules:
+        # SLO: 99.9% availability over 30 days (error budget)
+        # Recording rules for SLO dashboards
+        - record: atb:broker:requests:total:rate5m
+          expr: sum(rate(atb_broker_requests_total[5m])) by (job)
+
+        - record: atb:broker:requests:success:rate5m
+          expr: sum(rate(atb_broker_requests_total{decision="allow"}[5m])) by (job)
+
+        - record: atb:broker:requests:error:rate5m
+          expr: sum(rate(atb_broker_requests_total{decision="error"}[5m])) by (job)
+
+        - record: atb:broker:availability:rate5m
+          expr: |
+            (
+              atb:broker:requests:total:rate5m - atb:broker:requests:error:rate5m
+            ) / atb:broker:requests:total:rate5m
+
+        # Error budget burn rate (configurable SLO)
+        - alert: ATBBrokerErrorBudgetBurn
+          expr: |
+            (
+              1 - atb:broker:availability:rate5m
+            ) > (1 - {{ .Values.observability.prometheus.rules.brokerAvailabilitySLO }}) * 14.4
+          for: 5m
+          labels:
+            severity: critical
+            service: atb-broker
+          annotations:
+            summary: "ATB Broker burning error budget too fast"
+            description: "ATB Broker is burning error budget at 14.4x the sustainable rate (SLO: {{ .Values.observability.prometheus.rules.brokerAvailabilitySLO | mul 100 }}%). At this rate, the monthly error budget will be exhausted in less than 2 hours."
+
+    - name: atb.security
+      interval: 30s
+      rules:
+        # Security-related alerts
+        - alert: ATBHighReplayAttempts
+          expr: |
+            sum(rate(atb_broker_requests_total{reason="poa_replay_detected"}[5m])) by (job) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+            service: atb-broker
+            category: security
+          annotations:
+            summary: "High PoA replay attempts detected"
+            description: "More than 6 PoA replay attempts per minute detected. Possible token theft or misconfiguration."
+
+        - alert: ATBHighSubMismatch
+          expr: |
+            sum(rate(atb_broker_requests_total{reason="sub_mismatch"}[5m])) by (job) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+            service: atb-broker
+            category: security
+          annotations:
+            summary: "High subject mismatch rate"
+            description: "Multiple requests with PoA subject mismatch. Possible credential sharing or misconfiguration."
+
+        - alert: ATBHighPlatformAuthFailures
+          expr: |
+            sum(rate(atb_broker_requests_total{reason=~"platform_identity_invalid.*"}[5m])) by (job) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+            service: atb-broker
+            category: security
+          annotations:
+            summary: "High platform identity validation failures"
+            description: "Multiple platform identity (OIDC) validation failures. Check IdP configuration or token expiry."
+{{- end }}
