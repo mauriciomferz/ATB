@@ -20,6 +20,12 @@ spec:
           curl -fsS http://{{ .Release.Name }}-broker:{{ .Values.broker.service.httpPort }}/health;
           echo "Checking OPA /health";
           curl -fsS http://{{ .Release.Name }}-opa:{{ .Values.opa.service.port }}/health;
+          {{- if .Values.agentauth.enabled }}
+          echo "Checking AgentAuth /health";
+          curl -fsS http://{{ .Release.Name }}-agentauth:{{ .Values.agentauth.service.port }}/health;
+          echo "Checking AgentAuth JWKS";
+          curl -fsS http://{{ .Release.Name }}-agentauth:{{ .Values.agentauth.service.port }}/.well-known/jwks.json | grep -q '"keys"';
+          {{- end }}
           {{- if .Values.csi.enabled }}
           echo "Checking SPIFFE CSI mount";
           test -d {{ .Values.csi.mountPath }};

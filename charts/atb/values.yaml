@@ -25,7 +25,7 @@ broker:
     OPA_DECISION_URL: "http://{{ .Release.Name }}-opa.{{ .Values.namespace }}.svc.cluster.local:8181/v1/data/atb/poa/decision"
     POA_MAX_TTL_SECONDS: "300"
     # PoA verification: prefer JWKS via AgentAuth when available.
-    POA_JWKS_URL: ""
+    POA_JWKS_URL: "http://{{ .Release.Name }}-agentauth.{{ .Values.namespace }}.svc.cluster.local:9090/.well-known/jwks.json"
     POA_JWKS_CACHE_SECONDS: "300"
     POA_VERIFY_PUBKEY_PEM: ""
   resources: {}
@@ -48,6 +48,27 @@ opa:
   service:
     type: ClusterIP
     port: 8181
+  resources: {}
+
+agentauth:
+  enabled: true
+  name: agentauth
+  image:
+    repository: ghcr.io/mauriciomferz/atb-agentauth
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 9090
+  env:
+    POA_ISSUER: "atb-agentauth"
+    POA_TTL_SECONDS: "300"
+    CHALLENGE_TTL_SECONDS: "300"
+    # Optional: require this header for approvals (simulates MFA/approval gateway)
+    APPROVAL_SHARED_SECRET: ""
+    # Optional: Ed25519 signing key (PKCS8 PEM). Leave empty for ephemeral dev key.
+    POA_SIGNING_ED25519_PRIVKEY_PEM: ""
   resources: {}
 
 policy:

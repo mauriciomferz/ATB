@@ -1,0 +1,18 @@
+{{- if .Values.agentauth.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-agentauth
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "atb.labels" . | indent 4 }}
+spec:
+  type: {{ .Values.agentauth.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: agentauth
+  ports:
+    - name: http
+      port: {{ .Values.agentauth.service.port }}
+      targetPort: http
+{{- end }}

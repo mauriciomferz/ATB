@@ -1,0 +1,59 @@
+{{- if .Values.agentauth.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-agentauth
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "atb.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.agentauth.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: agentauth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/name: agentauth
+    spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      containers:
+        - name: agentauth
+          image: {{ .Values.agentauth.image.repository }}:{{ .Values.agentauth.image.tag }}
+          imagePullPolicy: {{ .Values.agentauth.image.pullPolicy }}
+          env:
+            - name: LISTEN_ADDR
+              value: ":{{ .Values.agentauth.service.port }}"
+            - name: POA_ISSUER
+              value: {{ .Values.agentauth.env.POA_ISSUER | quote }}
+            - name: POA_TTL_SECONDS
+              value: {{ .Values.agentauth.env.POA_TTL_SECONDS | quote }}
+            - name: CHALLENGE_TTL_SECONDS
+              value: {{ .Values.agentauth.env.CHALLENGE_TTL_SECONDS | quote }}
+            - name: APPROVAL_SHARED_SECRET
+              value: {{ .Values.agentauth.env.APPROVAL_SHARED_SECRET | quote }}
+            - name: POA_SIGNING_ED25519_PRIVKEY_PEM
+              value: {{ .Values.agentauth.env.POA_SIGNING_ED25519_PRIVKEY_PEM | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.agentauth.service.port }}
+          resources:
+{{ toYaml .Values.agentauth.resources | indent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+{{- end }}
