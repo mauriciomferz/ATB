@@ -9,6 +9,13 @@ broker:
   env:
     UPSTREAM_URL: "http://upstream.atb-staging.svc.cluster.local:9000"
 
+agentauth:
+  enabled: true
+  secrets:
+    signingKey:
+      name: "atb-agentauth-signing-key"  # Must be created before helm install
+      key: "ed25519_privkey_pem"
+
 opa:
   replicas: 1
 
