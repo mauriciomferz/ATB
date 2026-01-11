@@ -151,8 +151,8 @@ cmd_status() {
     fi
     
     # Check AgentAuth
-    if curl -s "http://localhost:8082/health" >/dev/null 2>&1; then
-        echo -e "  AgentAuth: ${GREEN}● Running${NC} (http://localhost:8082)"
+    if curl -s "http://localhost:8444/health" >/dev/null 2>&1; then
+        echo -e "  AgentAuth: ${GREEN}● Running${NC} (http://localhost:8444)"
     else
         echo -e "  AgentAuth: ${RED}○ Stopped${NC}"
     fi
