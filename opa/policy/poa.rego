@@ -61,9 +61,88 @@ agent_spiffe := input.agent.spiffe_id
 poa := input.poa
 act := poa.act
 constraints := poa.con
+leg := poa.leg
 params := input.request.params
 
 poa_ttl := poa.exp - poa.iat
+
+# TTL validity helpers
+ttl_valid {
+	poa_ttl > 0
+	poa_ttl <= hard_cap_ttl_seconds
+	poa_ttl <= max_ttl_seconds
+}
+
+ttl_invalid {
+	poa_ttl <= 0
+}
+
+ttl_invalid {
+	poa_ttl > hard_cap_ttl_seconds
+}
+
+ttl_invalid {
+	poa_ttl > max_ttl_seconds
+}
+
+# Legal grounding (leg) validation
+# The leg claim must contain at minimum: jurisdiction (string) and accountable_party (object with type + id).
+
+leg_valid {
+	is_object(leg)
+	is_string(leg.jurisdiction)
+	count(leg.jurisdiction) > 0
+	is_object(leg.accountable_party)
+	is_string(leg.accountable_party.type)
+	is_string(leg.accountable_party.id)
+	count(leg.accountable_party.id) > 0
+}
+
+leg_missing_fields[f] {
+	not is_object(leg)
+	f := "leg"
+}
+
+leg_missing_fields[f] {
+	is_object(leg)
+	not is_string(leg.jurisdiction)
+	f := "leg.jurisdiction"
+}
+
+leg_missing_fields[f] {
+	is_object(leg)
+	is_string(leg.jurisdiction)
+	count(leg.jurisdiction) == 0
+	f := "leg.jurisdiction"
+}
+
+leg_missing_fields[f] {
+	is_object(leg)
+	not is_object(leg.accountable_party)
+	f := "leg.accountable_party"
+}
+
+leg_missing_fields[f] {
+	is_object(leg)
+	is_object(leg.accountable_party)
+	not is_string(leg.accountable_party.type)
+	f := "leg.accountable_party.type"
+}
+
+leg_missing_fields[f] {
+	is_object(leg)
+	is_object(leg.accountable_party)
+	not is_string(leg.accountable_party.id)
+	f := "leg.accountable_party.id"
+}
+
+leg_missing_fields[f] {
+	is_object(leg)
+	is_object(leg.accountable_party)
+	is_string(leg.accountable_party.id)
+	count(leg.accountable_party.id) == 0
+	f := "leg.accountable_party.id"
+}
 
 # Main decision
 
@@ -81,12 +160,21 @@ decision := {"allow": false, "reason": "poa_required_for_action"} {
 decision := {"allow": true, "reason": "allow"} {
 	poa_provided
 	count(missing_required_fields) == 0
-	poa_ttl > 0
-	poa_ttl <= hard_cap_ttl_seconds
-	poa_ttl <= max_ttl_seconds
+	leg_valid
+	ttl_valid
 	poa.sub == agent_spiffe
-	(req_action == "" or act == req_action)
+	action_matches_request
 	action_allowed
+}
+
+# Action matches request check (either no action requested or matches PoA)
+action_matches_request {
+	req_action == ""
+}
+
+action_matches_request {
+	req_action != ""
+	act == req_action
 }
 
 # More specific deny reasons (first-match style via else)
@@ -94,32 +182,34 @@ decision := {"allow": true, "reason": "allow"} {
 decision := {"allow": false, "reason": "missing_required_fields"} {
 	poa_provided
 	count(missing_required_fields) > 0
+} else := {"allow": false, "reason": "leg_invalid", "details": leg_missing_fields} {
+	poa_provided
+	count(missing_required_fields) == 0
+	not leg_valid
 } else := {"allow": false, "reason": "ttl_invalid"} {
 	poa_provided
 	count(missing_required_fields) == 0
-	(poa_ttl <= 0 or poa_ttl > hard_cap_ttl_seconds or poa_ttl > max_ttl_seconds)
+	leg_valid
+	ttl_invalid
 } else := {"allow": false, "reason": "sub_mismatch"} {
 	poa_provided
 	count(missing_required_fields) == 0
-	poa_ttl > 0
-	poa_ttl <= hard_cap_ttl_seconds
-	poa_ttl <= max_ttl_seconds
+	leg_valid
+	ttl_valid
 	poa.sub != agent_spiffe
 } else := {"allow": false, "reason": "action_mismatch"} {
 	poa_provided
 	count(missing_required_fields) == 0
-	poa_ttl > 0
-	poa_ttl <= hard_cap_ttl_seconds
-	poa_ttl <= max_ttl_seconds
+	leg_valid
+	ttl_valid
 	poa.sub == agent_spiffe
 	req_action != ""
 	act != req_action
 } else := {"allow": false, "reason": "action_denied"} {
 	poa_provided
 	count(missing_required_fields) == 0
-	poa_ttl > 0
-	poa_ttl <= hard_cap_ttl_seconds
-	poa_ttl <= max_ttl_seconds
+	leg_valid
+	ttl_valid
 	poa.sub == agent_spiffe
 	not action_allowed
 }
@@ -156,16 +246,18 @@ action_allowed {
 # Example constraint: liability_cap must exist and be >= amount.
 
 sap_vendor_change_allowed {
-	amount := number_or_default(params.amount, 0)
-	dual := bool_or_default(constraints.dual_control, false)
-	liability := number_or_default(constraints.liability_cap, 0)
+	amount := object.get(params, "amount", 0)
+	dual := object.get(constraints, "dual_control", false)
+	liability := object.get(constraints, "liability_cap", 0)
 
 	amount <= 5000
 	liability >= amount
-} else {
-	amount := number_or_default(params.amount, 0)
-	dual := bool_or_default(constraints.dual_control, false)
-	liability := number_or_default(constraints.liability_cap, 0)
+}
+
+sap_vendor_change_allowed {
+	amount := object.get(params, "amount", 0)
+	dual := object.get(constraints, "dual_control", false)
+	liability := object.get(constraints, "liability_cap", 0)
 
 	amount > 5000
 	dual == true

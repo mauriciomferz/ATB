@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atb.example.com/schemas/poa-leg.schema.json",
+  "title": "PoA Legal Grounding (leg) Claim",
+  "description": "Schema for the 'leg' claim in a Proof-of-Authorization (PoA) mandate, defining legal grounding, jurisdiction, accountable party, and approval references.",
+  "type": "object",
+  "required": ["jurisdiction", "accountable_party"],
+  "properties": {
+    "jurisdiction": {
+      "type": "string",
+      "description": "Legal jurisdiction governing this mandate (ISO 3166-1 alpha-2 country code or 'GLOBAL').",
+      "examples": ["DE", "US", "GB", "GLOBAL"]
+    },
+    "accountable_party": {
+      "type": "object",
+      "description": "The human or organizational entity legally accountable for the action.",
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["user", "service_account", "org_unit", "role"],
+          "description": "Type of accountable party."
+        },
+        "id": {
+          "type": "string",
+          "description": "Unique identifier (e.g., UPN, employee ID, service account name).",
+          "minLength": 1
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Human-readable name for audit/display purposes."
+        }
+      }
+    },
+    "approval_ref": {
+      "type": "string",
+      "description": "Reference to an external approval record (e.g., ServiceNow ticket, Jira issue, UUID of approval workflow).",
+      "examples": ["SNOW-INC0012345", "JIRA-SEC-789", "550e8400-e29b-41d4-a716-446655440000"]
+    },
+    "dual_control": {
+      "type": "object",
+      "description": "Dual-control / four-eyes approval metadata (when required).",
+      "properties": {
+        "required": {
+          "type": "boolean",
+          "description": "Whether dual control was required for this mandate."
+        },
+        "approver": {
+          "type": "object",
+          "description": "The second approver who authorized this mandate.",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["user", "role"]
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "display_name": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        "approved_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when dual-control approval was granted."
+        }
+      }
+    },
+    "regulation_refs": {
+      "type": "array",
+      "description": "List of regulatory frameworks this mandate helps satisfy.",
+      "items": {
+        "type": "string"
+      },
+      "examples": [["NIS2", "EU-AI-Act", "SOX"]]
+    },
+    "retention_days": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Minimum number of days the audit record for this mandate must be retained."
+    }
+  },
+  "additionalProperties": true
+}

@@ -304,13 +304,18 @@ func newPlatformVerifier(jwksURL, issuer, audience string, httpClient *http.Clie
 	if strings.TrimSpace(jwksURL) == "" {
 		return &platformVerifier{requirePlatID: required}
 	}
-	return &platformVerifier{
+	pv := &platformVerifier{
 		jwks:          newJWKSCache(jwksURL, httpClient, cacheTTL),
-		issuer:        strings.TrimSpace(issuer),
-		audience:      strings.TrimSpace(audience),
 		allowedAlgs:   []string{"RS256", "ES256"},
 		requirePlatID: required,
 	}
+	if trimmed := strings.TrimSpace(issuer); trimmed != "" {
+		pv.issuer = trimmed
+	}
+	if trimmed := strings.TrimSpace(audience); trimmed != "" {
+		pv.audience = trimmed
+	}
+	return pv
 }
 
 type platformClaims struct {
@@ -335,17 +340,29 @@ func (p *platformVerifier) verify(ctx context.Context, tokenRaw string) (*platfo
 		return nil, nil
 	}
 
+	// Build parse options dynamically; only validate issuer/audience when configured
+	parseOpts := []jwt.ParserOption{
+		jwt.WithValidMethods(p.allowedAlgs),
+		jwt.WithLeeway(30 * time.Second),
+	}
+	if p.issuer != "" {
+		parseOpts = append(parseOpts, jwt.WithIssuer(p.issuer))
+	}
+	if p.audience != "" {
+		parseOpts = append(parseOpts, jwt.WithAudience(p.audience))
+	}
+
 	token, err := jwt.ParseWithClaims(tokenRaw, &platformClaims{}, func(t *jwt.Token) (interface{}, error) {
 		kid, _ := t.Header["kid"].(string)
 		if kid == "" {
 			return nil, errors.New("missing kid in token header")
 		}
-		key, err := p.jwks.get(context.Background(), kid)
+		key, err := p.jwks.get(ctx, kid)
 		if err != nil {
 			return nil, err
 		}
 		return key, nil
-	}, jwt.WithValidMethods(p.allowedAlgs), jwt.WithIssuer(p.issuer), jwt.WithAudience(p.audience), jwt.WithLeeway(30*time.Second))
+	}, parseOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("platform token invalid: %w", err)
 	}

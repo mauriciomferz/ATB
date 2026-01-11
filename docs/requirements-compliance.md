@@ -46,7 +46,7 @@ Legend: **Implemented** | **Partial** | **Gap**
 | Broker as single enforcement boundary           |                Implemented | `atb-gateway-go/cmd/broker/main.go`, Helm chart `charts/atb`                                         | Still needs real “connectors” to SAP/Salesforce/etc with egress allowlists and per-connector shaping.                            |
 | SPIFFE/SPIRE workload identity (secret-less)    |                Implemented | `atb-gateway-go/cmd/broker/main.go` (Workload API), `spire/`, `docs/k8s-quickstart.md`, `charts/atb` | SPIFFE is currently focused on _internal_ mTLS identity.                                                                         |
 | Separate platform identity vs authority         |                Implemented | PoA + AgentAuth + broker `X-Platform-Token` OIDC verification                                        | Broker validates Entra ID (or other IdP) tokens via JWKS; claims passed to OPA as `input.platform` and logged.                   |
-| PoA mandates (short-lived, bounded, auditable)  |                Implemented | `atb-gateway-go/cmd/agentauth/main.go`, `opa/policy/poa.rego`, broker PoA verification (JWKS or PEM) | PoA contains `act/con/leg/jti/iat/exp`. Replay protection via `POA_SINGLE_USE`. Still missing: formal schema for `leg`.          |
+| PoA mandates (short-lived, bounded, auditable)  |                Implemented | `atb-gateway-go/cmd/agentauth/main.go`, `opa/policy/poa.rego`, broker PoA verification (JWKS or PEM) | PoA contains `act/con/leg/jti/iat/exp`. Replay protection via `POA_SINGLE_USE`. `leg` schema: `schemas/poa-leg.schema.json`, validated by OPA. |
 | Risk-tiering (high risk PoA, low risk log-only) | Implemented (configurable) | `opa/policy/poa.rego`, broker env `ALLOW_UNMANDATED_LOW_RISK`                                        | Default remains “PoA required for everything” unless the env var is enabled.                                                     |
 | Central policy enforcement (OPA)                |                Implemented | `opa/policy/poa.rego`, broker `OPA_DECISION_URL`                                                     | Policy content is currently a pilot/sample; expand to real enterprise actions.                                                   |
 | Semantic/prompt-injection firewall              |                    Partial | broker `semanticGuardrails(...)` placeholder                                                         | Replace placeholder with a real semantic firewall or guardrails service.                                                         |
@@ -64,7 +64,7 @@ Security/controls:
 
 Governance/legal:
 
-- Define a **`leg` schema** (jurisdiction, accountable party, approval references) and enforce it in policy.
+- ~~Define a **`leg` schema** (jurisdiction, accountable party, approval references) and enforce it in policy.~~ ✅ Done (`schemas/poa-leg.schema.json`, OPA rules in `poa.rego`)
 - Implement **dual control** flow in AgentAuth for actions marked high risk.
 
 Ops/observability:
