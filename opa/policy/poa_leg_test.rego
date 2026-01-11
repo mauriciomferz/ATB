@@ -15,6 +15,13 @@ base_input := {
 				"type": "employee",
 				"id": "emp-123",
 				"display_name": "Alice Smith"
+			},
+			"dual_control": {
+				"required": true,
+				"approvers": [
+					{"id": "approver-001", "type": "employee"},
+					{"id": "approver-002", "type": "employee"}
+				]
 			}
 		},
 		"iat": 1700000000,
@@ -90,9 +97,12 @@ test_leg_accountable_party_empty_id {
 test_leg_valid_with_optional_fields {
 	inp := json.patch(base_input, [
 		{"op": "add", "path": "/poa/leg/approval_ref", "value": "SNOW-INC-001"},
-		{"op": "add", "path": "/poa/leg/dual_control", "value": {
+		{"op": "replace", "path": "/poa/leg/dual_control", "value": {
 			"required": true,
-			"approver": {"type": "manager", "id": "mgr-456"},
+			"approvers": [
+				{"type": "manager", "id": "mgr-456"},
+				{"type": "manager", "id": "mgr-789"}
+			],
 			"approved_at": "2024-01-15T10:00:00Z"
 		}},
 		{"op": "add", "path": "/poa/leg/regulation_refs", "value": ["NIS2", "EU-AI-Act"]}

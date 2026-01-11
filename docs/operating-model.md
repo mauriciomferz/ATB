@@ -75,12 +75,61 @@ Requestor → Open issue: "Add connector: <system>"
 
 ## 3. Risk Thresholds
 
-| Risk Level | Definition                                           | Control                        |
-|------------|------------------------------------------------------|--------------------------------|
-| Low        | Read-only, non-PII, internal data                    | Single PoA, low_risk_allowlist |
-| Medium     | Write operations, limited PII                        | Standard PoA, full OPA check   |
-| High       | Bulk operations, PII export, financial transactions  | Dual control, short TTL        |
-| Critical   | Cross-tenant, privileged access, deletion            | Dual control + manual approval |
+| Risk Level | Definition                                           | Control                          | OPA Enforcement |
+|------------|------------------------------------------------------|----------------------------------|-----------------|
+| Low        | Read-only, non-PII, internal data                    | PoA required (or allowlist)      | `low_risk_allowlist` if `ALLOW_UNMANDATED_LOW_RISK=true` |
+| Medium     | Write operations, limited PII                        | PoA + single approver            | `leg.approval.approver_id` required, must differ from requester |
+| High       | Bulk operations, PII export, financial transactions  | PoA + dual control (2 approvers) | `leg.dual_control.approvers[]` with ≥2 distinct principals |
+| Critical   | Cross-tenant, privileged access, deletion            | Dual control + manual approval   | Same as High, plus external ticket reference |
+
+### Risk-Tiered Actions (in OPA policy)
+
+**Medium-Risk Actions** (`medium_risk_actions`):
+- `crm.contact.update`, `crm.lead.create`
+- `erp.order.create`, `erp.order.update`
+- `hr.employee.view_limited`
+- `support.ticket.create`, `support.ticket.update`
+- `inventory.stock.adjust`, `catalog.product.update`
+
+**High-Risk Actions** (`high_risk_actions`):
+- `sap.vendor.change`, `sap.payment.execute`, `erp.payment.process`
+- `salesforce.bulk.export`, `salesforce.bulk.delete`, `crm.contacts.bulk_delete`
+- `hr.employee.export_pii`, `customer.data.export`
+- `iam.role.assign`, `iam.permission.grant`
+- `ot.system.manual_override`, `scada.setpoint.change`
+
+### Example `leg` Claims by Tier
+
+**Medium-risk (single approver)**:
+```json
+{
+  "leg": {
+    "jurisdiction": "US",
+    "accountable_party": {"type": "employee", "id": "emp-100"},
+    "approval": {
+      "approver_id": "manager-001",
+      "approved_at": "2024-01-15T10:00:00Z"
+    }
+  }
+}
+```
+
+**High-risk (dual control)**:
+```json
+{
+  "leg": {
+    "jurisdiction": "EU",
+    "accountable_party": {"type": "employee", "id": "emp-200"},
+    "dual_control": {
+      "required": true,
+      "approvers": [
+        {"id": "approver-a", "type": "manager"},
+        {"id": "approver-b", "type": "compliance"}
+      ]
+    }
+  }
+}
+```
 
 ---
 
@@ -190,4 +239,4 @@ All production changes follow the standard CAB process:
 
 ---
 
-*Last updated: 2024*
+*Last updated: 2026*

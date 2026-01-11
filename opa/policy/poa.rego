@@ -220,6 +220,22 @@ decision := {"allow": true, "reason": "allow"} {
 	platform_spiffe_binding_valid
 	action_matches_request
 	action_allowed
+	risk_tier_approved
+}
+
+# Risk tier approval check
+risk_tier_approved {
+	action_risk_tier == "low"
+}
+
+risk_tier_approved {
+	action_risk_tier == "medium"
+	medium_risk_approved
+}
+
+risk_tier_approved {
+	action_risk_tier == "high"
+	high_risk_approved
 }
 
 # Action matches request check (either no action requested or matches PoA)
@@ -276,6 +292,26 @@ decision := {"allow": false, "reason": "missing_required_fields"} {
 	poa.sub == agent_spiffe
 	platform_spiffe_binding_valid
 	not action_allowed
+} else := {"allow": false, "reason": "medium_risk_approval_required", "details": {"tier": "medium", "action": act}} {
+	poa_provided
+	count(missing_required_fields) == 0
+	leg_valid
+	ttl_valid
+	poa.sub == agent_spiffe
+	platform_spiffe_binding_valid
+	action_allowed
+	is_medium_risk
+	not medium_risk_approved
+} else := {"allow": false, "reason": "high_risk_dual_control_required", "details": {"tier": "high", "action": act}} {
+	poa_provided
+	count(missing_required_fields) == 0
+	leg_valid
+	ttl_valid
+	poa.sub == agent_spiffe
+	platform_spiffe_binding_valid
+	action_allowed
+	is_high_risk
+	not high_risk_approved
 }
 
 # Low-risk action allowlist (no PoA required when ALLOW_UNMANDATED_LOW_RISK=true)
@@ -321,6 +357,108 @@ low_risk_path_patterns := [
 	"/ping",
 ]
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Medium-risk tier: requires PoA with single approver (lighter than dual control)
+# Actions in this tier need explicit approval but not full dual-control ceremony.
+# ─────────────────────────────────────────────────────────────────────────────
+
+medium_risk_actions := [
+	# Write operations on non-critical data
+	"crm.contact.update",
+	"crm.lead.create",
+	"erp.order.create",
+	"erp.order.update",
+	# Limited PII access
+	"hr.employee.view_limited",
+	"support.ticket.create",
+	"support.ticket.update",
+	# Non-financial updates
+	"inventory.stock.adjust",
+	"catalog.product.update",
+]
+
+# High-risk tier: requires PoA with dual control (two distinct approvers)
+high_risk_actions := [
+	# Financial transactions
+	"sap.vendor.change",
+	"sap.payment.execute",
+	"erp.payment.process",
+	# Bulk operations
+	"salesforce.bulk.export",
+	"salesforce.bulk.delete",
+	"crm.contacts.bulk_delete",
+	# PII exports
+	"hr.employee.export_pii",
+	"customer.data.export",
+	# Privileged access
+	"iam.role.assign",
+	"iam.permission.grant",
+	# OT/safety critical
+	"ot.system.manual_override",
+	"scada.setpoint.change",
+]
+
+# Check if action is medium-risk
+is_medium_risk {
+	medium_risk_actions[_] == act
+}
+
+# Check if action is high-risk
+is_high_risk {
+	high_risk_actions[_] == act
+}
+
+# Medium-risk validation: requires approval in leg claim
+medium_risk_approved {
+	is_medium_risk
+	is_object(leg.approval)
+	is_string(leg.approval.approver_id)
+	count(leg.approval.approver_id) > 0
+	# Approver must be different from requester
+	leg.approval.approver_id != poa.sub
+}
+
+# High-risk validation: requires dual control (two distinct approvers)
+high_risk_approved {
+	is_high_risk
+	is_object(leg.dual_control)
+	leg.dual_control.required == true
+	is_array(leg.dual_control.approvers)
+	count(leg.dual_control.approvers) >= 2
+	# All approvers must be distinct from requester
+	all_approvers_distinct
+}
+
+all_approvers_distinct {
+	approvers := leg.dual_control.approvers
+	# No approver is the same as the PoA subject
+	no_self_approval
+	# All approvers are unique (check via count of unique IDs)
+	unique_ids := {id | some i; id := approvers[i].id}
+	count(unique_ids) >= 2
+}
+
+no_self_approval {
+	approvers := leg.dual_control.approvers
+	# Ensure no approver has the same ID as PoA subject
+	count([a | some i; a := approvers[i]; a.id == poa.sub]) == 0
+}
+
+# Action risk tier determination
+action_risk_tier := "high" {
+	is_high_risk
+}
+
+action_risk_tier := "medium" {
+	not is_high_risk
+	is_medium_risk
+}
+
+action_risk_tier := "low" {
+	not is_high_risk
+	not is_medium_risk
+}
+
 # Pilot actions
 
 action_allowed {
@@ -336,6 +474,27 @@ action_allowed {
 action_allowed {
 	act == "ot.system.manual_override"
 	ot_manual_override_allowed
+}
+
+# Default: allow actions not explicitly denied (relies on risk tier checks for approval)
+# This covers medium-risk, high-risk, and custom actions not in the pilot list.
+action_allowed {
+	# Action is in medium-risk or high-risk list (risk tier will validate approval)
+	is_medium_risk
+}
+
+action_allowed {
+	is_high_risk
+}
+
+# Default allow for actions not in any explicit list (low-risk custom actions)
+action_allowed {
+	not is_medium_risk
+	not is_high_risk
+	# Not a pilot action (those have their own rules above)
+	act != "sap.vendor.change"
+	act != "salesforce.bulk.export"
+	act != "ot.system.manual_override"
 }
 
 # === Action policies ===
