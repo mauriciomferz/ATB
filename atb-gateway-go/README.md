@@ -14,13 +14,16 @@ This is a **Policy Enforcement Point (PEP)** skeleton for the Agent Tool Broker 
 1. Start OPA with the policy in `../opa/policy/poa.rego` loaded (example: `opa run --server ../opa/policy/poa.rego`).
 2. Export required env vars:
    - `UPSTREAM_URL` (e.g., `http://localhost:9000`)
-   - `POA_VERIFY_PUBKEY_PEM` (PEM public key for RS256 or EdDSA)
+    - Choose one PoA verification mode:
+       - Static key: `POA_VERIFY_PUBKEY_PEM` (PEM public key for RS256 or EdDSA)
+       - JWKS (recommended with AgentAuth): `POA_JWKS_URL` (e.g., `http://agentauth:9090/.well-known/jwks.json`)
    - Choose one TLS mode:
      - File-based TLS (dev-friendly): `TLS_CERT_FILE`, `TLS_KEY_FILE` and (recommended) `TLS_CLIENT_CA_FILE`
      - SPIFFE Workload API (secret-less): `SPIFFE_ENDPOINT_SOCKET` (e.g., `unix:///spire-agent-socket/api.sock`)
    - Optional: `OPA_DECISION_URL` (default `http://localhost:8181/v1/data/atb/poa/decision`)
    - Optional: `OPA_HEALTH_URL` (defaults to the same host as `OPA_DECISION_URL` with path `/health`)
    - Optional: `POA_MAX_TTL_SECONDS` (default `300`, hard cap `900`)
+    - Optional (JWKS): `POA_JWKS_CACHE_SECONDS` (default `300`)
    - Optional: `HTTP_LISTEN_ADDR` for health/metrics (default `:8080`)
 3. Build/run:
    - `go build ./cmd/broker`

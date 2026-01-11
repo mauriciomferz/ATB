@@ -18,7 +18,9 @@ broker:
     UPSTREAM_URL: "http://upstream.default.svc.cluster.local:9000"
     OPA_DECISION_URL: "http://{{ .Release.Name }}-opa.{{ .Values.namespace }}.svc.cluster.local:8181/v1/data/atb/poa/decision"
     POA_MAX_TTL_SECONDS: "300"
-    # PoA verification: for production, prefer POA_JWKS_URL + JWKS cache in broker.
+    # PoA verification: prefer JWKS via AgentAuth when available.
+    POA_JWKS_URL: ""
+    POA_JWKS_CACHE_SECONDS: "300"
     POA_VERIFY_PUBKEY_PEM: ""
   resources: {}
   securityContext:

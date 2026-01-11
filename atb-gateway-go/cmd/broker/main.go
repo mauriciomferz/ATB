@@ -18,8 +18,10 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -215,16 +217,134 @@ func loadVerifyKey() (interface{}, []string, error) {
 	}
 }
 
-func verifyPoAJWT(tokenStr string, maxTTLSec int64, verifyKey interface{}, allowedAlgs []string) (*PoAClaims, error) {
+type jwksCache struct {
+	url      string
+	http     *http.Client
+	cacheTTL time.Duration
+
+	mu        sync.RWMutex
+	keysByKID map[string]interface{}
+	lastFetch time.Time
+}
+
+func newJWKSCache(url string, httpClient *http.Client, cacheTTL time.Duration) *jwksCache {
+	return &jwksCache{
+		url:       url,
+		http:      httpClient,
+		cacheTTL:  cacheTTL,
+		keysByKID: map[string]interface{}{},
+	}
+}
+
+func (c *jwksCache) refresh(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("jwks status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	var set jose.JSONWebKeySet
+	if err := json.NewDecoder(resp.Body).Decode(&set); err != nil {
+		return err
+	}
+	keys := map[string]interface{}{}
+	for _, k := range set.Keys {
+		if k.Key == nil {
+			continue
+		}
+		kid := strings.TrimSpace(k.KeyID)
+		if kid == "" {
+			continue
+		}
+		keys[kid] = k.Key
+	}
+	if len(keys) == 0 {
+		return errors.New("jwks contained no usable keys")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.keysByKID = keys
+	c.lastFetch = time.Now().UTC()
+	return nil
+}
+
+func (c *jwksCache) get(ctx context.Context, kid string) (interface{}, error) {
+	kid = strings.TrimSpace(kid)
+	if kid == "" {
+		return nil, errors.New("missing kid")
+	}
+	c.mu.RLock()
+	key, ok := c.keysByKID[kid]
+	last := c.lastFetch
+	ttl := c.cacheTTL
+	c.mu.RUnlock()
+
+	if ok && ttl > 0 && time.Since(last) < ttl {
+		return key, nil
+	}
+	// Refresh on miss or staleness.
+	ctx2, cancel := context.WithTimeout(ctx, 1200*time.Millisecond)
+	defer cancel()
+	if err := c.refresh(ctx2); err != nil {
+		if ok {
+			// Serve stale key if we had it.
+			return key, nil
+		}
+		return nil, err
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	key, ok = c.keysByKID[kid]
+	if !ok {
+		return nil, fmt.Errorf("kid not found: %s", kid)
+	}
+	return key, nil
+}
+
+func loadPoAKeyFunc(httpClient *http.Client) (jwt.Keyfunc, []string, error) {
+	jwksURL := strings.TrimSpace(os.Getenv("POA_JWKS_URL"))
+	if jwksURL != "" {
+		cacheSec := envInt64("POA_JWKS_CACHE_SECONDS", 300)
+		if cacheSec < 0 {
+			cacheSec = 0
+		}
+		cache := newJWKSCache(jwksURL, httpClient, time.Duration(cacheSec)*time.Second)
+		// Eager fetch so we fail fast at startup.
+		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		defer cancel()
+		if err := cache.refresh(ctx); err != nil {
+			return nil, nil, fmt.Errorf("jwks refresh failed: %w", err)
+		}
+		keyFunc := func(t *jwt.Token) (interface{}, error) {
+			kid, _ := t.Header["kid"].(string)
+			return cache.get(context.Background(), kid)
+		}
+		return keyFunc, []string{"EdDSA", "RS256"}, nil
+	}
+
+	verifyKey, allowedAlgs, err := loadVerifyKey()
+	if err != nil {
+		return nil, nil, err
+	}
+	keyFunc := func(t *jwt.Token) (interface{}, error) { return verifyKey, nil }
+	return keyFunc, allowedAlgs, nil
+}
+
+func verifyPoAJWT(tokenStr string, maxTTLSec int64, keyFunc jwt.Keyfunc, allowedAlgs []string) (*PoAClaims, error) {
 	claims := &PoAClaims{}
 	parser := jwt.NewParser(
 		jwt.WithValidMethods(allowedAlgs),
 		jwt.WithLeeway(10*time.Second),
 	)
 
-	tok, err := parser.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-		return verifyKey, nil
-	})
+	tok, err := parser.ParseWithClaims(tokenStr, claims, keyFunc)
 	if err != nil {
 		return nil, err
 	}
@@ -316,17 +436,17 @@ func main() {
 	}
 
 	maxTTLSec := envInt64("POA_MAX_TTL_SECONDS", 300)
-	verifyKey, allowedAlgs, err := loadVerifyKey()
-	authConfigured := true
-	if err != nil {
-		authConfigured = false
-		log.Printf("WARN: PoA verification not configured; gateway will deny protected requests (%v)", err)
-	}
 
 	targetURL := mustParseURL(upstream)
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	httpClient := &http.Client{Timeout: 1500 * time.Millisecond}
 	opa := &OPAClient{URL: opaURL, HTTP: httpClient}
+	keyFunc, allowedAlgs, err := loadPoAKeyFunc(httpClient)
+	authConfigured := true
+	if err != nil {
+		authConfigured = false
+		log.Printf("WARN: PoA verification not configured; gateway will deny protected requests (%v)", err)
+	}
 	opaHealthURL := strings.TrimSpace(os.Getenv("OPA_HEALTH_URL"))
 	if opaHealthURL == "" {
 		opaHealthURL = deriveOPAHealthURL(opaURL)
@@ -361,7 +481,7 @@ func main() {
 			return
 		}
 
-		claims, err := verifyPoAJWT(poaToken, maxTTLSec, verifyKey, allowedAlgs)
+		claims, err := verifyPoAJWT(poaToken, maxTTLSec, keyFunc, allowedAlgs)
 		if err != nil {
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "poa_invalid:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
