@@ -52,17 +52,18 @@ type PoAClaims struct {
 }
 
 type AuditEvent struct {
-	Timestamp     time.Time              `json:"ts"`
-	RequestID     string                 `json:"request_id,omitempty"`
-	MandateID     string                 `json:"poa_jti,omitempty"`
-	AgentIdentity string                 `json:"agent_identity"`
-	Action        string                 `json:"action,omitempty"`
-	Constraints   map[string]interface{} `json:"constraints,omitempty"`
-	Decision      string                 `json:"decision"` // allow|deny|error
-	Reason        string                 `json:"reason"`
-	Target        string                 `json:"target_service"`
-	Method        string                 `json:"method"`
-	Path          string                 `json:"path"`
+	Timestamp        time.Time              `json:"ts"`
+	RequestID        string                 `json:"request_id,omitempty"`
+	MandateID        string                 `json:"poa_jti,omitempty"`
+	AgentIdentity    string                 `json:"agent_identity"`
+	PlatformIdentity string                 `json:"platform_identity,omitempty"`
+	Action           string                 `json:"action,omitempty"`
+	Constraints      map[string]interface{} `json:"constraints,omitempty"`
+	Decision         string                 `json:"decision"` // allow|deny|error
+	Reason           string                 `json:"reason"`
+	Target           string                 `json:"target_service"`
+	Method           string                 `json:"method"`
+	Path             string                 `json:"path"`
 }
 
 type OPAClient struct {
@@ -71,10 +72,11 @@ type OPAClient struct {
 }
 
 type OPAInput struct {
-	Agent   map[string]interface{} `json:"agent"`
-	PoA     map[string]interface{} `json:"poa"`
-	Request map[string]interface{} `json:"request"`
-	Policy  map[string]interface{} `json:"policy,omitempty"`
+	Agent    map[string]interface{} `json:"agent"`
+	Platform map[string]interface{} `json:"platform,omitempty"`
+	PoA      map[string]interface{} `json:"poa"`
+	Request  map[string]interface{} `json:"request"`
+	Policy   map[string]interface{} `json:"policy,omitempty"`
 }
 
 func (c *OPAClient) Decide(ctx context.Context, input OPAInput) (bool, string, error) {
@@ -287,6 +289,71 @@ func (c *replayCache) markIfFresh(jti string, until time.Time, now time.Time) bo
 	}
 
 	return true
+}
+
+// platformVerifier validates OIDC tokens from agent platforms (e.g., Entra ID).
+type platformVerifier struct {
+	jwks          *jwksCache
+	issuer        string
+	audience      string
+	allowedAlgs   []string
+	requirePlatID bool
+}
+
+func newPlatformVerifier(jwksURL, issuer, audience string, httpClient *http.Client, cacheTTL time.Duration, required bool) *platformVerifier {
+	if strings.TrimSpace(jwksURL) == "" {
+		return &platformVerifier{requirePlatID: required}
+	}
+	return &platformVerifier{
+		jwks:          newJWKSCache(jwksURL, httpClient, cacheTTL),
+		issuer:        strings.TrimSpace(issuer),
+		audience:      strings.TrimSpace(audience),
+		allowedAlgs:   []string{"RS256", "ES256"},
+		requirePlatID: required,
+	}
+}
+
+type platformClaims struct {
+	Sub   string `json:"sub"`
+	Oid   string `json:"oid,omitempty"`
+	AppID string `json:"appid,omitempty"`
+	Azp   string `json:"azp,omitempty"`
+	jwt.RegisteredClaims
+}
+
+func (p *platformVerifier) verify(ctx context.Context, tokenRaw string) (*platformClaims, error) {
+	if p.jwks == nil {
+		if p.requirePlatID {
+			return nil, errors.New("platform identity verification not configured")
+		}
+		return nil, nil
+	}
+	if strings.TrimSpace(tokenRaw) == "" {
+		if p.requirePlatID {
+			return nil, errors.New("missing platform identity token")
+		}
+		return nil, nil
+	}
+
+	token, err := jwt.ParseWithClaims(tokenRaw, &platformClaims{}, func(t *jwt.Token) (interface{}, error) {
+		kid, _ := t.Header["kid"].(string)
+		if kid == "" {
+			return nil, errors.New("missing kid in token header")
+		}
+		key, err := p.jwks.get(context.Background(), kid)
+		if err != nil {
+			return nil, err
+		}
+		return key, nil
+	}, jwt.WithValidMethods(p.allowedAlgs), jwt.WithIssuer(p.issuer), jwt.WithAudience(p.audience), jwt.WithLeeway(30*time.Second))
+	if err != nil {
+		return nil, fmt.Errorf("platform token invalid: %w", err)
+	}
+	claims, ok := token.Claims.(*platformClaims)
+	if !ok || !token.Valid {
+		return nil, errors.New("invalid platform token claims")
+	}
+	return claims, nil
 }
 
 func newJWKSCache(url string, httpClient *http.Client, cacheTTL time.Duration) *jwksCache {
@@ -503,9 +570,19 @@ func main() {
 	poaReplayCacheMax := int(envInt64("POA_REPLAY_CACHE_MAX", 10000))
 	replay := newReplayCache(poaReplayCacheMax)
 
+	// Platform identity (OIDC) verification – e.g., Entra ID access tokens.
+	platJWKSURL := strings.TrimSpace(os.Getenv("PLATFORM_JWKS_URL"))
+	platIssuer := strings.TrimSpace(os.Getenv("PLATFORM_ISSUER"))
+	platAudience := strings.TrimSpace(os.Getenv("PLATFORM_AUDIENCE"))
+	platRequired := envBool("PLATFORM_IDENTITY_REQUIRED", false)
+	platCacheSec := envInt64("PLATFORM_JWKS_CACHE_SECONDS", 300)
+
 	targetURL := mustParseURL(upstream)
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	httpClient := &http.Client{Timeout: 1500 * time.Millisecond}
+
+	platVerifier := newPlatformVerifier(platJWKSURL, platIssuer, platAudience, httpClient, time.Duration(platCacheSec)*time.Second, platRequired)
+
 	opa := &OPAClient{URL: opaURL, HTTP: httpClient}
 	keyFunc, allowedAlgs, err := loadPoAKeyFunc(httpClient)
 	authConfigured := true
@@ -538,8 +615,34 @@ func main() {
 			return
 		}
 
+		// Validate platform identity token (e.g., Entra ID) if configured.
+		platToken := strings.TrimSpace(r.Header.Get("X-Platform-Token"))
+		platClaims, platErr := platVerifier.verify(r.Context(), platToken)
+		if platErr != nil {
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "platform_identity_invalid:" + platErr.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
+			http.Error(w, "invalid platform identity", http.StatusUnauthorized)
+			return
+		}
+		platformID := ""
+		var platformData map[string]interface{}
+		if platClaims != nil {
+			platformID = platClaims.Sub
+			if platformID == "" {
+				platformID = platClaims.Oid
+			}
+			platformData = map[string]interface{}{
+				"sub":   platClaims.Sub,
+				"oid":   platClaims.Oid,
+				"appid": platClaims.AppID,
+				"azp":   platClaims.Azp,
+				"iss":   platClaims.Issuer,
+				"aud":   platClaims.Audience,
+			}
+		}
+
 		if !authConfigured {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "poa_verification_not_configured", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Decision: "deny", Reason: "poa_verification_not_configured", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
 			http.Error(w, "authorization not configured", http.StatusServiceUnavailable)
 			return
@@ -567,15 +670,16 @@ func main() {
 		}
 		if poaToken == "" {
 			if !allowUnmandatedLowRisk {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: "missing_poa", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "deny", Reason: "missing_poa", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 				brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 				http.Error(w, "missing PoA token", http.StatusUnauthorized)
 				return
 			}
 
 			input := OPAInput{
-				Agent: map[string]interface{}{"spiffe_id": agentSPIFFE},
-				PoA:   map[string]interface{}{},
+				Agent:    map[string]interface{}{"spiffe_id": agentSPIFFE},
+				Platform: platformData,
+				PoA:      map[string]interface{}{},
 				Request: map[string]interface{}{
 					"action": actionHeader,
 					"method": r.Method,
@@ -587,19 +691,19 @@ func main() {
 
 			allow, reason, err := opa.Decide(r.Context(), input)
 			if err != nil {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "error", Reason: "opa_error:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "error", Reason: "opa_error:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 				brokerRequestsTotal.WithLabelValues("error", actionForLogs).Inc()
 				http.Error(w, "policy evaluation error", http.StatusInternalServerError)
 				return
 			}
 			if !allow {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 				brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 				http.Error(w, "PoA required", http.StatusUnauthorized)
 				return
 			}
 
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "allow", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "allow", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("allow", actionForLogs).Inc()
 			proxy.ServeHTTP(w, r)
 			return
@@ -607,28 +711,29 @@ func main() {
 
 		claims, err := verifyPoAJWT(poaToken, maxTTLSec, keyFunc, allowedAlgs)
 		if err != nil {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: "poa_invalid:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "deny", Reason: "poa_invalid:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 			http.Error(w, "invalid PoA", http.StatusForbidden)
 			return
 		}
 
 		if claims.Subject != agentSPIFFE {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "sub_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "sub_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "PoA subject mismatch", http.StatusForbidden)
 			return
 		}
 
 		if actionHeader != "" && actionHeader != claims.Act {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "action_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "action_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "PoA action mismatch", http.StatusForbidden)
 			return
 		}
 
 		input := OPAInput{
-			Agent: map[string]interface{}{"spiffe_id": agentSPIFFE},
+			Agent:    map[string]interface{}{"spiffe_id": agentSPIFFE},
+			Platform: platformData,
 			PoA: map[string]interface{}{
 				"sub": claims.Subject,
 				"act": claims.Act,
@@ -649,7 +754,7 @@ func main() {
 
 		allow, reason, err := opa.Decide(r.Context(), input)
 		if err != nil {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "error", Reason: "opa_error:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "error", Reason: "opa_error:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("error", claims.Act).Inc()
 			http.Error(w, "policy evaluation error", http.StatusInternalServerError)
 			return
@@ -658,7 +763,7 @@ func main() {
 			if reason == "" {
 				reason = "policy_denied"
 			}
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "policy denied", http.StatusForbidden)
 			return
@@ -668,14 +773,14 @@ func main() {
 			now := time.Now().UTC()
 			until := claims.ExpiresAt.Time.Add(30 * time.Second)
 			if !replay.markIfFresh(claims.ID, until, now) {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "poa_replay_detected", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "poa_replay_detected", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 				brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 				http.Error(w, "PoA replay detected", http.StatusForbidden)
 				return
 			}
 		}
 
-		audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, Action: claims.Act, Constraints: claims.Con, Decision: "allow", Reason: "policy_allow", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+		audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "allow", Reason: "policy_allow", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 		brokerRequestsTotal.WithLabelValues("allow", claims.Act).Inc()
 		proxy.ServeHTTP(w, r)
 	})

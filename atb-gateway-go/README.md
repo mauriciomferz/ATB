@@ -35,6 +35,18 @@ Audit schema and examples: see [docs/audit.md](../docs/audit.md).
 - Optional: `POA_REPLAY_CACHE_MAX` (default `10000`) — max in-memory PoA `jti` entries.
 - Optional: `HTTP_LISTEN_ADDR` for health/metrics (default `:8080`)
 
+### Platform identity (OIDC) verification
+
+Validate agent-platform access tokens (e.g., Entra ID) before PoA verification:
+
+- `PLATFORM_JWKS_URL` — JWKS endpoint for the IdP (e.g., `https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys`)
+- `PLATFORM_ISSUER` — expected `iss` claim (e.g., `https://sts.windows.net/{tenant}/`)
+- `PLATFORM_AUDIENCE` — expected `aud` claim (your app/client ID)
+- `PLATFORM_IDENTITY_REQUIRED` (default `false`) — if `true`, denies requests missing a valid platform token
+- `PLATFORM_JWKS_CACHE_SECONDS` (default `300`)
+
+The platform token is read from the `X-Platform-Token` header. When provided, claims (`sub`, `oid`, `appid`, `azp`, `iss`, `aud`) are included in OPA input as `input.platform` and in audit events as `platform_identity`.
+
 3. Build/run:
    - `go build ./cmd/broker`
    - `./broker`

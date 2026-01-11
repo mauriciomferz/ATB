@@ -45,8 +45,8 @@ Legend: **Implemented** | **Partial** | **Gap**
 | ----------------------------------------------- | -------------------------: | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Broker as single enforcement boundary           |                Implemented | `atb-gateway-go/cmd/broker/main.go`, Helm chart `charts/atb`                                         | Still needs real “connectors” to SAP/Salesforce/etc with egress allowlists and per-connector shaping.                            |
 | SPIFFE/SPIRE workload identity (secret-less)    |                Implemented | `atb-gateway-go/cmd/broker/main.go` (Workload API), `spire/`, `docs/k8s-quickstart.md`, `charts/atb` | SPIFFE is currently focused on _internal_ mTLS identity.                                                                         |
-| Separate platform identity vs authority         |                    Partial | PoA + AgentAuth exist; platform identity validation not yet                                          | Missing inbound platform identity validation (e.g., Entra ID OIDC) and mapping to agent/platform tenants.                        |
-| PoA mandates (short-lived, bounded, auditable)  |                    Partial | `atb-gateway-go/cmd/agentauth/main.go`, `opa/policy/poa.rego`, broker PoA verification (JWKS or PEM) | PoA contains `act/con/leg/jti/iat/exp`. Still missing: formal schema for `leg` (jurisdiction/accountable party) and anti-replay. |
+| Separate platform identity vs authority         |                Implemented | PoA + AgentAuth + broker `X-Platform-Token` OIDC verification                                        | Broker validates Entra ID (or other IdP) tokens via JWKS; claims passed to OPA as `input.platform` and logged.                   |
+| PoA mandates (short-lived, bounded, auditable)  |                Implemented | `atb-gateway-go/cmd/agentauth/main.go`, `opa/policy/poa.rego`, broker PoA verification (JWKS or PEM) | PoA contains `act/con/leg/jti/iat/exp`. Replay protection via `POA_SINGLE_USE`. Still missing: formal schema for `leg`.          |
 | Risk-tiering (high risk PoA, low risk log-only) | Implemented (configurable) | `opa/policy/poa.rego`, broker env `ALLOW_UNMANDATED_LOW_RISK`                                        | Default remains “PoA required for everything” unless the env var is enabled.                                                     |
 | Central policy enforcement (OPA)                |                Implemented | `opa/policy/poa.rego`, broker `OPA_DECISION_URL`                                                     | Policy content is currently a pilot/sample; expand to real enterprise actions.                                                   |
 | Semantic/prompt-injection firewall              |                    Partial | broker `semanticGuardrails(...)` placeholder                                                         | Replace placeholder with a real semantic firewall or guardrails service.                                                         |
@@ -58,8 +58,8 @@ Legend: **Implemented** | **Partial** | **Gap**
 
 Security/controls:
 
-- Add **PoA replay protection** (e.g., bounded `jti` cache with TTL, optionally backed by Redis).
-- Add **OIDC verification for agent-platform identity** (e.g., Entra ID JWT validation): separate headers/claims for platform identity vs PoA authority.
+- ~~Add **PoA replay protection** (e.g., bounded `jti` cache with TTL, optionally backed by Redis).~~ ✅ Done (`POA_SINGLE_USE`)
+- ~~Add **OIDC verification for agent-platform identity** (e.g., Entra ID JWT validation).~~ ✅ Done (`PLATFORM_JWKS_URL` et al.)
 - Tighten **low-risk policy** from “GET allowed” to an explicit allowlist of actions/paths and connector-level scoping.
 
 Governance/legal:
