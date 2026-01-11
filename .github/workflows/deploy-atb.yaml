@@ -29,6 +29,39 @@ env:
   IMAGE_TAG: ${{ (github.event_name == 'workflow_dispatch' && inputs.imageTag != '' && inputs.imageTag) || github.sha }}
 
 jobs:
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: atb-gateway-go/go.mod
+          cache: true
+          cache-dependency-path: |
+            atb-gateway-go/go.sum
+
+      - name: Go govulncheck
+        working-directory: atb-gateway-go
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: atb-gateway-py/requirements.txt
+
+      - name: Python pip-audit
+        working-directory: atb-gateway-py
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit
+          python -m pip_audit -r requirements.txt
+
   build-and-push-images:
     runs-on: ubuntu-latest
     steps:
@@ -106,7 +139,7 @@ jobs:
           path: dist/*.tgz
 
   deploy-staging:
-    needs: [lint-and-package, build-and-push-images]
+    needs: [lint-and-package, build-and-push-images, security-audit]
     runs-on: ubuntu-latest
     environment: staging
     steps:
