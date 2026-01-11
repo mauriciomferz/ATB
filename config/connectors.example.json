@@ -1,0 +1,79 @@
+{
+  "default_connector": "sap-erp-prod",
+  "connectors": [
+    {
+      "id": "sap-erp-prod",
+      "name": "SAP ERP Production",
+      "upstream_url": "https://sap-erp.internal.example.com:443",
+      "enabled": true,
+      "egress_allowlist": [
+        "^/sap/opu/odata/sap/.*$",
+        "^/sap/bc/rest/.*$",
+        "^/sap/opu/odata4/sap/.*$"
+      ],
+      "rate_limit": 100,
+      "burst_limit": 200,
+      "timeout": "30s",
+      "headers": {
+        "X-SAP-Client": "100"
+      }
+    },
+    {
+      "id": "salesforce-prod",
+      "name": "Salesforce Production",
+      "upstream_url": "https://myorg.my.salesforce.com",
+      "enabled": true,
+      "egress_allowlist": [
+        "^/services/data/v[0-9]+\\.0/.*$",
+        "^/services/apexrest/.*$",
+        "^/services/async/.*$"
+      ],
+      "rate_limit": 50,
+      "burst_limit": 100,
+      "timeout": "60s",
+      "headers": {}
+    },
+    {
+      "id": "servicenow-prod",
+      "name": "ServiceNow Production",
+      "upstream_url": "https://myinstance.service-now.com",
+      "enabled": true,
+      "egress_allowlist": [
+        "^/api/now/table/.*$",
+        "^/api/now/v2/table/.*$",
+        "^/api/sn_chg_rest/change/.*$"
+      ],
+      "rate_limit": 30,
+      "burst_limit": 60,
+      "timeout": "45s",
+      "headers": {}
+    },
+    {
+      "id": "dynamics365-prod",
+      "name": "Dynamics 365 Production",
+      "upstream_url": "https://myorg.crm.dynamics.com",
+      "enabled": true,
+      "egress_allowlist": [
+        "^/api/data/v[0-9]+\\.[0-9]+/.*$"
+      ],
+      "rate_limit": 40,
+      "burst_limit": 80,
+      "timeout": "30s",
+      "headers": {}
+    },
+    {
+      "id": "workday-prod",
+      "name": "Workday Production",
+      "upstream_url": "https://wd5-services1.myworkday.com",
+      "enabled": false,
+      "egress_allowlist": [
+        "^/ccx/service/.*$",
+        "^/ccx/api/.*$"
+      ],
+      "rate_limit": 20,
+      "burst_limit": 40,
+      "timeout": "60s",
+      "headers": {}
+    }
+  ]
+}

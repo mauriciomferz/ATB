@@ -48,6 +48,18 @@ broker:
     auditSinkAuth:
       name: ""
       key: "audit_sink_auth"
+  # Connector configuration for multi-backend routing
+  connectors:
+    # If enabled, provide config inline or via ConfigMap
+    enabled: false
+    # ConfigMap name containing connectors.json (mutually exclusive with inline)
+    configMapName: ""
+    # Inline connector config (used if configMapName is empty)
+    inline: |
+      {
+        "default_connector": "",
+        "connectors": []
+      }
   resources: {}
   securityContext:
     runAsNonRoot: true

@@ -1,0 +1,15 @@
+{{- if and .Values.broker.enabled .Values.broker.connectors.enabled }}
+{{- if not .Values.broker.connectors.configMapName }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-broker-connectors
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: atb-broker
+    release: {{ .Release.Name }}
+data:
+  connectors.json: |
+{{ .Values.broker.connectors.inline | indent 4 }}
+{{- end }}
+{{- end }}

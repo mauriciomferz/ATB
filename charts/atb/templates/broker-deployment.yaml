@@ -97,6 +97,10 @@ spec:
             - name: SPIFFE_ENDPOINT_SOCKET
               value: {{ printf "unix://%s/%s" .Values.csi.mountPath .Values.csi.socketFile | quote }}
             {{- end }}
+            {{- if .Values.broker.connectors.enabled }}
+            - name: CONNECTOR_CONFIG_FILE
+              value: "/config/connectors/connectors.json"
+            {{- end }}
           ports:
             - name: mtls
               containerPort: {{ .Values.broker.service.mtlsPort }}
@@ -113,6 +117,11 @@ spec:
             {{- if .Values.csi.enabled }}
             - name: spiffe-workload-api
               mountPath: {{ .Values.csi.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.broker.connectors.enabled }}
+            - name: connectors
+              mountPath: /config/connectors
               readOnly: true
             {{- end }}
           livenessProbe:
@@ -138,5 +147,10 @@ spec:
           csi:
             driver: {{ .Values.csi.driver | quote }}
             readOnly: true
+        {{- end }}
+        {{- if .Values.broker.connectors.enabled }}
+        - name: connectors
+          configMap:
+            name: {{ default (printf "%s-broker-connectors" .Release.Name) .Values.broker.connectors.configMapName }}
         {{- end }}
 {{- end }}

@@ -17,6 +17,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -215,6 +216,225 @@ func (m *MultiSink) Close() error {
 		}
 	}
 	return lastErr
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Connector types for multi-backend routing with egress allowlists and shaping
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Connector represents a backend system (SAP, Salesforce, etc.) with routing config
+type Connector struct {
+	ID              string            `json:"id"`
+	Name            string            `json:"name"`
+	UpstreamURL     string            `json:"upstream_url"`
+	EgressAllowlist []string          `json:"egress_allowlist,omitempty"`
+	RateLimit       float64           `json:"rate_limit,omitempty"`
+	BurstLimit      int               `json:"burst_limit,omitempty"`
+	TimeoutSec      int               `json:"timeout_seconds,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	Enabled         bool              `json:"enabled"`
+	egressPatterns  []*regexp.Regexp
+	proxy           *httputil.ReverseProxy
+	limiter         *connectorLimiter
+}
+
+type connectorLimiter struct {
+	mu       sync.Mutex
+	tokens   float64
+	rate     float64
+	burst    int
+	lastTick time.Time
+}
+
+func newConnectorLimiter(rate float64, burst int) *connectorLimiter {
+	if burst <= 0 {
+		burst = int(rate)
+	}
+	if burst <= 0 {
+		burst = 1
+	}
+	return &connectorLimiter{tokens: float64(burst), rate: rate, burst: burst, lastTick: time.Now()}
+}
+
+func (l *connectorLimiter) Allow() bool {
+	if l == nil || l.rate <= 0 {
+		return true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	elapsed := now.Sub(l.lastTick).Seconds()
+	l.lastTick = now
+	l.tokens += elapsed * l.rate
+	if l.tokens > float64(l.burst) {
+		l.tokens = float64(l.burst)
+	}
+	if l.tokens >= 1 {
+		l.tokens--
+		return true
+	}
+	return false
+}
+
+// ConnectorRegistry manages connectors with thread-safe access
+type ConnectorRegistry struct {
+	mu         sync.RWMutex
+	connectors map[string]*Connector
+	defaultID  string
+}
+
+func newConnectorRegistry() *ConnectorRegistry {
+	return &ConnectorRegistry{connectors: make(map[string]*Connector)}
+}
+
+func (r *ConnectorRegistry) LoadFromFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading connector config: %w", err)
+	}
+	return r.LoadFromJSON(data)
+}
+
+func (r *ConnectorRegistry) LoadFromJSON(data []byte) error {
+	var config struct {
+		DefaultConnector string       `json:"default_connector"`
+		Connectors       []*Connector `json:"connectors"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("parsing connector config: %w", err)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.defaultID = config.DefaultConnector
+	r.connectors = make(map[string]*Connector)
+	for _, c := range config.Connectors {
+		if err := c.compile(); err != nil {
+			return fmt.Errorf("connector %s: %w", c.ID, err)
+		}
+		r.connectors[c.ID] = c
+	}
+	return nil
+}
+
+func (c *Connector) compile() error {
+	c.egressPatterns = make([]*regexp.Regexp, 0, len(c.EgressAllowlist))
+	for _, pattern := range c.EgressAllowlist {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("invalid egress pattern %q: %w", pattern, err)
+		}
+		c.egressPatterns = append(c.egressPatterns, re)
+	}
+	target, err := url.Parse(c.UpstreamURL)
+	if err != nil {
+		return fmt.Errorf("invalid upstream URL: %w", err)
+	}
+	c.proxy = httputil.NewSingleHostReverseProxy(target)
+	if c.TimeoutSec > 0 {
+		c.proxy.Transport = &http.Transport{ResponseHeaderTimeout: time.Duration(c.TimeoutSec) * time.Second}
+	}
+	if c.RateLimit > 0 {
+		c.limiter = newConnectorLimiter(c.RateLimit, c.BurstLimit)
+	}
+	return nil
+}
+
+func (r *ConnectorRegistry) Get(id string) *Connector {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.connectors[id]
+}
+
+func (r *ConnectorRegistry) GetDefault() *Connector {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.defaultID == "" {
+		return nil
+	}
+	return r.connectors[r.defaultID]
+}
+
+type ConnectorError struct {
+	Code    string
+	Message string
+}
+
+func (e *ConnectorError) Error() string { return e.Message }
+
+// Resolve finds connector by: PoA con.connector > header > default
+func (r *ConnectorRegistry) Resolve(connectorID, header string) (*Connector, *ConnectorError) {
+	id := connectorID
+	if id == "" {
+		id = header
+	}
+	if id == "" {
+		r.mu.RLock()
+		id = r.defaultID
+		r.mu.RUnlock()
+	}
+	if id == "" {
+		return nil, &ConnectorError{Code: "no_connector", Message: "no connector specified and no default configured"}
+	}
+	c := r.Get(id)
+	if c == nil {
+		return nil, &ConnectorError{Code: "connector_not_found", Message: fmt.Sprintf("connector %q not found", id)}
+	}
+	if !c.Enabled {
+		return nil, &ConnectorError{Code: "connector_disabled", Message: fmt.Sprintf("connector %q is disabled", id)}
+	}
+	return c, nil
+}
+
+func (c *Connector) EgressAllowed(path string) bool {
+	if len(c.egressPatterns) == 0 {
+		return true
+	}
+	for _, re := range c.egressPatterns {
+		if re.MatchString(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Connector) RateLimitAllowed() bool {
+	return c.limiter.Allow()
+}
+
+func (c *Connector) ValidateRequest(path string) *ConnectorError {
+	if !c.EgressAllowed(path) {
+		return &ConnectorError{Code: "egress_denied", Message: fmt.Sprintf("path %q not in egress allowlist for connector %q", path, c.ID)}
+	}
+	if !c.RateLimitAllowed() {
+		return &ConnectorError{Code: "rate_limited", Message: fmt.Sprintf("rate limit exceeded for connector %q", c.ID)}
+	}
+	return nil
+}
+
+func (c *Connector) AddHeaders(r *http.Request) {
+	for k, v := range c.Headers {
+		r.Header.Set(k, v)
+	}
+}
+
+// Prometheus metrics for connectors
+var (
+	connectorRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "atb_connector_requests_total", Help: "Requests per connector"},
+		[]string{"connector", "decision", "reason"},
+	)
+	connectorEgressDenied = prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "atb_connector_egress_denied_total", Help: "Egress denials per connector"},
+		[]string{"connector"},
+	)
+	connectorRateLimited = prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "atb_connector_rate_limited_total", Help: "Rate limit denials per connector"},
+		[]string{"connector"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(connectorRequestsTotal, connectorEgressDenied, connectorRateLimited)
 }
 
 // Global audit sink (configured at startup)
@@ -772,6 +992,17 @@ func main() {
 	platRequired := envBool("PLATFORM_IDENTITY_REQUIRED", false)
 	platCacheSec := envInt64("PLATFORM_JWKS_CACHE_SECONDS", 300)
 
+	// Connector registry for multi-backend routing
+	var connRegistry *ConnectorRegistry
+	connectorConfigFile := strings.TrimSpace(os.Getenv("CONNECTOR_CONFIG_FILE"))
+	if connectorConfigFile != "" {
+		connRegistry = newConnectorRegistry()
+		if err := connRegistry.LoadFromFile(connectorConfigFile); err != nil {
+			log.Fatalf("Failed to load connector config: %v", err)
+		}
+		log.Printf("Loaded connector config from %s", connectorConfigFile)
+	}
+
 	targetURL := mustParseURL(upstream)
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	httpClient := &http.Client{Timeout: 1500 * time.Millisecond}
@@ -900,6 +1131,32 @@ func main() {
 
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "allow", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("allow", actionForLogs).Inc()
+
+			// Use connector if configured, otherwise default proxy
+			if connRegistry != nil {
+				connectorHeader := strings.TrimSpace(r.Header.Get("X-ATB-Connector"))
+				conn, connErr := connRegistry.Resolve("", connectorHeader)
+				if connErr != nil {
+					connectorRequestsTotal.WithLabelValues("", "deny", connErr.Code).Inc()
+					http.Error(w, connErr.Message, http.StatusBadRequest)
+					return
+				}
+				if valErr := conn.ValidateRequest(r.URL.Path); valErr != nil {
+					if valErr.Code == "egress_denied" {
+						connectorEgressDenied.WithLabelValues(conn.ID).Inc()
+					} else if valErr.Code == "rate_limited" {
+						connectorRateLimited.WithLabelValues(conn.ID).Inc()
+					}
+					connectorRequestsTotal.WithLabelValues(conn.ID, "deny", valErr.Code).Inc()
+					http.Error(w, valErr.Message, http.StatusForbidden)
+					return
+				}
+				conn.AddHeaders(r)
+				connectorRequestsTotal.WithLabelValues(conn.ID, "allow", "").Inc()
+				conn.proxy.ServeHTTP(w, r)
+				return
+			}
+
 			proxy.ServeHTTP(w, r)
 			return
 		}
@@ -977,6 +1234,38 @@ func main() {
 
 		audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "allow", Reason: "policy_allow", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 		brokerRequestsTotal.WithLabelValues("allow", claims.Act).Inc()
+
+		// Resolve and validate connector if registry is configured
+		if connRegistry != nil {
+			connectorIDFromPoA := ""
+			if claims.Con != nil {
+				if cid, ok := claims.Con["connector"].(string); ok {
+					connectorIDFromPoA = cid
+				}
+			}
+			connectorHeader := strings.TrimSpace(r.Header.Get("X-ATB-Connector"))
+			conn, connErr := connRegistry.Resolve(connectorIDFromPoA, connectorHeader)
+			if connErr != nil {
+				connectorRequestsTotal.WithLabelValues(connectorIDFromPoA, "deny", connErr.Code).Inc()
+				http.Error(w, connErr.Message, http.StatusBadRequest)
+				return
+			}
+			if valErr := conn.ValidateRequest(r.URL.Path); valErr != nil {
+				if valErr.Code == "egress_denied" {
+					connectorEgressDenied.WithLabelValues(conn.ID).Inc()
+				} else if valErr.Code == "rate_limited" {
+					connectorRateLimited.WithLabelValues(conn.ID).Inc()
+				}
+				connectorRequestsTotal.WithLabelValues(conn.ID, "deny", valErr.Code).Inc()
+				http.Error(w, valErr.Message, http.StatusForbidden)
+				return
+			}
+			conn.AddHeaders(r)
+			connectorRequestsTotal.WithLabelValues(conn.ID, "allow", "").Inc()
+			conn.proxy.ServeHTTP(w, r)
+			return
+		}
+
 		proxy.ServeHTTP(w, r)
 	})
 
