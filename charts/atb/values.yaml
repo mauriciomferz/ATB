@@ -5,6 +5,10 @@ imagePullSecrets: []
 broker:
   enabled: true
   name: broker
+  serviceAccount:
+    create: true
+    # If empty, defaults to "atb-broker".
+    name: ""
   image:
     repository: ghcr.io/mauriciomferz/atb-broker
     tag: "0.1.0"
@@ -40,6 +44,10 @@ pep:
 opa:
   enabled: true
   name: opa
+  serviceAccount:
+    create: true
+    # If empty, defaults to "atb-opa".
+    name: ""
   image:
     repository: openpolicyagent/opa
     tag: "0.66.0"
@@ -53,6 +61,10 @@ opa:
 agentauth:
   enabled: true
   name: agentauth
+  serviceAccount:
+    create: true
+    # If empty, defaults to "atb-agentauth".
+    name: ""
   image:
     repository: ghcr.io/mauriciomferz/atb-agentauth
     tag: "0.1.0"

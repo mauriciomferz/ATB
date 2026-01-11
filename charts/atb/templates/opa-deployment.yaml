@@ -18,6 +18,7 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/name: opa
     spec:
+      serviceAccountName: {{ default "atb-opa" .Values.opa.serviceAccount.name }}
       containers:
         - name: opa
           image: {{ .Values.opa.image.repository }}:{{ .Values.opa.image.tag }}

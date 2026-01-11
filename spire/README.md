@@ -15,10 +15,42 @@ These files are meant as a starting point:
 ## Intended identity model
 
 - Trust domain: `example.org` (replace with your enterprise trust domain).
-- SPIFFE IDs:
-  - Broker: `spiffe://<td>/ns/atb/sa/atb-broker`
-  - AgentAuth: `spiffe://<td>/ns/atb/sa/atb-agentauth`
-  - Connector(s): `spiffe://<td>/ns/atb/sa/<connector-sa>`
+- SPIFFE IDs (recommended pattern):
+  - Broker: `spiffe://<td>/ns/<namespace>/sa/atb-broker`
+  - AgentAuth: `spiffe://<td>/ns/<namespace>/sa/atb-agentauth`
+  - OPA (optional): `spiffe://<td>/ns/<namespace>/sa/atb-opa`
+  - Connector(s): `spiffe://<td>/ns/<namespace>/sa/<connector-sa>`
+
+Where `<namespace>` should match the Helm chart value `namespace` (e.g., `atb` or `atb-staging`).
+
+## Helm + SPIFFE CSI driver integration
+
+The ATB Helm chart supports secret-less mTLS for the broker via the SPIFFE Workload API socket.
+
+1) Install a SPIFFE CSI driver (example: `csi.spiffe.io`) and run SPIRE Agent with Workload API enabled.
+
+2) Enable the socket mount and SPIFFE TLS mode in your values:
+
+- In staging/prod, we default to:
+  - `csi.enabled: true`
+  - `broker.tls.mode: spiffe`
+
+3) The chart mounts the Workload API socket and sets:
+
+- `SPIFFE_ENDPOINT_SOCKET=unix://<mountPath>/<socketFile>`
+
+Defaults:
+- `mountPath=/spire-agent-socket`
+- `socketFile=workload-api.sock`
+
+## ServiceAccounts (for k8s selectors)
+
+The chart creates stable ServiceAccounts by default (in `.Values.namespace`):
+- `atb-broker`
+- `atb-agentauth`
+- `atb-opa`
+
+These are intended to be used as SPIRE workload selectors (`k8s:ns`, `k8s:sa`).
 
 ## Operational notes
 

@@ -22,6 +22,7 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/name: broker
     spec:
+      serviceAccountName: {{ default "atb-broker" .Values.broker.serviceAccount.name }}
       {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
 {{ toYaml .Values.imagePullSecrets | indent 8 }}
