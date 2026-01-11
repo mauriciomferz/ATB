@@ -1,0 +1,14 @@
+{
+  "scenarios": {
+    "soak": {
+      "executor": "constant-vus",
+      "vus": 50,
+      "duration": "2h"
+    }
+  },
+  "thresholds": {
+    "http_req_duration": ["p(95)<200", "p(99)<500"],
+    "http_req_failed": ["rate<0.01"],
+    "errors": ["rate<0.01"]
+  }
+}

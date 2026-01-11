@@ -26,6 +26,11 @@ help:
 	@echo "  make coverage       - Run tests with coverage report"
 	@echo "  make demo           - Interactive demo of risk tiers"
 	@echo ""
+	@echo "Load Testing:"
+	@echo "  make load-test      - Run k6 load test (requires k6)"
+	@echo "  make load-stress    - Run k6 stress test"
+	@echo "  make load-soak      - Run k6 soak test (2 hours)"
+	@echo ""
 	@echo "Development:"
 	@echo "  make run-opa        - Start OPA server (localhost:8181)"
 	@echo "  make run-upstream   - Start echo upstream server"
@@ -269,6 +274,25 @@ docs: ## Generate API documentation from OpenAPI specs
 	@echo "📚 Generating API documentation..."
 	@chmod +x ./scripts/gen_api_docs.sh
 	@./scripts/gen_api_docs.sh
+
+# ============================================================================
+# Load Testing
+# ============================================================================
+
+load-test: ## Run k6 load test (requires k6)
+	@echo "🔥 Running load test..."
+	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
+	k6 run tests/load/broker_load.js
+
+load-stress: ## Run k6 stress test
+	@echo "🔥 Running stress test..."
+	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
+	k6 run --config tests/load/stress.json tests/load/broker_load.js
+
+load-soak: ## Run k6 soak test (2 hours)
+	@echo "🔥 Running soak test (2 hours)..."
+	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
+	k6 run --config tests/load/soak.json tests/load/broker_load.js
 
 # ============================================================================
 # Validation

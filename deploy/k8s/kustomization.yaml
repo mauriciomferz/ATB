@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: atb
+
+resources:
+  - namespace.yaml
+  - opa/deployment.yaml
+  - broker/deployment.yaml
+  - broker/configmap.yaml
+  - agentauth/deployment.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: agent-trust-broker
+  app.kubernetes.io/managed-by: kustomize
+
+# Uncomment for production overlays
+# images:
+#   - name: ghcr.io/your-org/atb-broker
+#     newTag: v1.0.0
+#   - name: ghcr.io/your-org/atb-agentauth
+#     newTag: v1.0.0

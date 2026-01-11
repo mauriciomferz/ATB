@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atb-broker
+  namespace: atb
+  labels:
+    app.kubernetes.io/name: broker
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: agent-trust-broker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: broker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: broker
+        app.kubernetes.io/component: gateway
+    spec:
+      serviceAccountName: atb-broker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: broker
+          image: ghcr.io/your-org/atb-broker:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          env:
+            - name: OPA_URL
+              value: "http://atb-opa:8181"
+            - name: LOG_LEVEL
+              value: "info"
+            - name: LOG_FORMAT
+              value: "json"
+            - name: TLS_CERT_FILE
+              value: "/certs/tls.crt"
+            - name: TLS_KEY_FILE
+              value: "/certs/tls.key"
+            - name: TLS_CA_FILE
+              value: "/certs/ca.crt"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /certs
+              readOnly: true
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: atb-tls
+        - name: config
+          configMap:
+            name: atb-broker-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atb-broker
+  namespace: atb
+  labels:
+    app.kubernetes.io/name: broker
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 8443
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    app.kubernetes.io/name: broker
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atb-broker
+  namespace: atb
+  labels:
+    app.kubernetes.io/name: broker
