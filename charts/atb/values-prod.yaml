@@ -4,6 +4,8 @@ broker:
   replicas: 3
   image:
     tag: "0.1.0"
+  tls:
+    mode: spiffe
   env:
     UPSTREAM_URL: "http://upstream.atb.svc.cluster.local:9000"
 
