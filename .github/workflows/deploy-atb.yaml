@@ -13,6 +13,10 @@ on:
         default: 'false'
         type: choice
         options: ['false','true']
+      imageTag:
+        description: 'Container image tag to deploy (defaults to commit SHA). Useful for promoting a known-good staging image to prod.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -22,13 +26,22 @@ permissions:
 env:
   CHART_PATH: charts/atb
   REGISTRY: ghcr.io
-  IMAGE_TAG: ${{ github.sha }}
+  IMAGE_TAG: ${{ (github.event_name == 'workflow_dispatch' && inputs.imageTag != '' && inputs.imageTag) || github.sha }}
 
 jobs:
   build-and-push-images:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Compute GHCR owner (lowercase)
+        shell: bash
+        run: |
+          owner='${{ github.repository_owner }}'
+          echo "OWNER_LC=${owner,,}" >> "$GITHUB_ENV"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -46,8 +59,11 @@ jobs:
           context: atb-gateway-go
           file: atb-gateway-go/Dockerfile.broker
           push: true
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/atb-broker:${{ env.IMAGE_TAG }}
+            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/atb-broker:${{ env.IMAGE_TAG }}
 
       - name: Build and push agentauth
         uses: docker/build-push-action@v6
@@ -55,8 +71,11 @@ jobs:
           context: atb-gateway-go
           file: atb-gateway-go/Dockerfile.agentauth
           push: true
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/atb-agentauth:${{ env.IMAGE_TAG }}
+            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/atb-agentauth:${{ env.IMAGE_TAG }}
 
   lint-and-package:
     runs-on: ubuntu-latest
@@ -92,6 +111,12 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
+
+      - name: Compute GHCR owner (lowercase)
+        shell: bash
+        run: |
+          owner='${{ github.repository_owner }}'
+          echo "OWNER_LC=${owner,,}" >> "$GITHUB_ENV"
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -130,9 +155,9 @@ jobs:
             -n atb-staging --create-namespace \
             -f "$CHART_PATH/values-staging.yaml" \
             -f "$CHART_PATH/values-observability.yaml" \
-            --set broker.image.repository=${{ env.REGISTRY }}/${{ github.repository_owner }}/atb-broker \
+            --set broker.image.repository=${{ env.REGISTRY }}/${{ env.OWNER_LC }}/atb-broker \
             --set broker.image.tag=${{ env.IMAGE_TAG }} \
-            --set agentauth.image.repository=${{ env.REGISTRY }}/${{ github.repository_owner }}/atb-agentauth \
+            --set agentauth.image.repository=${{ env.REGISTRY }}/${{ env.OWNER_LC }}/atb-agentauth \
             --set agentauth.image.tag=${{ env.IMAGE_TAG }} \
             --wait --timeout 10m
 
@@ -147,6 +172,12 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.deployProd == 'true' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Compute GHCR owner (lowercase)
+        shell: bash
+        run: |
+          owner='${{ github.repository_owner }}'
+          echo "OWNER_LC=${owner,,}" >> "$GITHUB_ENV"
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -181,9 +212,9 @@ jobs:
             -n atb --create-namespace \
             -f "$CHART_PATH/values-prod.yaml" \
             -f "$CHART_PATH/values-observability.yaml" \
-            --set broker.image.repository=${{ env.REGISTRY }}/${{ github.repository_owner }}/atb-broker \
+            --set broker.image.repository=${{ env.REGISTRY }}/${{ env.OWNER_LC }}/atb-broker \
             --set broker.image.tag=${{ env.IMAGE_TAG }} \
-            --set agentauth.image.repository=${{ env.REGISTRY }}/${{ github.repository_owner }}/atb-agentauth \
+            --set agentauth.image.repository=${{ env.REGISTRY }}/${{ env.OWNER_LC }}/atb-agentauth \
             --set agentauth.image.tag=${{ env.IMAGE_TAG }} \
             --wait --timeout 15m
 

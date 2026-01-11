@@ -24,8 +24,8 @@ broker:
     UPSTREAM_URL: "http://upstream.default.svc.cluster.local:9000"
     OPA_DECISION_URL: "http://{{ .Release.Name }}-opa.{{ .Values.namespace }}.svc.cluster.local:8181/v1/data/atb/poa/decision"
     POA_MAX_TTL_SECONDS: "300"
-    # PoA verification: prefer JWKS via AgentAuth when available.
-    POA_JWKS_URL: "http://{{ .Release.Name }}-agentauth.{{ .Values.namespace }}.svc.cluster.local:9090/.well-known/jwks.json"
+    # PoA verification: when empty and AgentAuth is enabled, the broker chart defaults this to the in-cluster AgentAuth JWKS endpoint.
+    POA_JWKS_URL: ""
     POA_JWKS_CACHE_SECONDS: "300"
     POA_VERIFY_PUBKEY_PEM: ""
   resources: {}
