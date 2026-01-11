@@ -1,6 +1,7 @@
 # Agent Trust Broker (ATB)
 
 [![CI](https://github.com/mauriciomferz/ATB/actions/workflows/ci.yaml/badge.svg)](https://github.com/mauriciomferz/ATB/actions/workflows/ci.yaml)
+[![Security](https://github.com/mauriciomferz/ATB/actions/workflows/security.yaml/badge.svg)](https://github.com/mauriciomferz/ATB/actions/workflows/security.yaml)
 [![Deploy](https://github.com/mauriciomferz/ATB/actions/workflows/deploy-atb.yaml/badge.svg)](https://github.com/mauriciomferz/ATB/actions/workflows/deploy-atb.yaml)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev/)
 [![OPA](https://img.shields.io/badge/OPA-Policy-7D9AAA?logo=openpolicyagent)](https://www.openpolicyagent.org/)
@@ -79,6 +80,9 @@ kubectl logs -n atb -l app=atb-broker
 
 ### Documentation
 
+- [Architecture Guide](docs/architecture.md) - System design and components
+- [API Reference - Broker](docs/openapi.yaml) - OpenAPI spec for ATB Broker
+- [API Reference - AgentAuth](docs/openapi-agentauth.yaml) - OpenAPI spec for AgentAuth
 - [Kubernetes Quickstart](docs/k8s-quickstart.md) - Deployment guide
 - [Operating Model](docs/operating-model.md) - RACI, approval flows, risk thresholds
 - [Enterprise Actions](docs/enterprise-actions.md) - 145+ actions with constraint rules

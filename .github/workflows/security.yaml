@@ -1,0 +1,156 @@
+# Security Scanning Workflow
+# Runs on schedule and PRs to detect vulnerabilities
+
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Monday at 9am UTC
+    - cron: '0 9 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # Go vulnerability scanning
+  govulncheck:
+    name: Go Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: atb-gateway-go/go.mod
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        working-directory: atb-gateway-go
+        run: govulncheck ./...
+
+  # Python dependency scanning
+  pip-audit:
+    name: Python Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        working-directory: atb-gateway-py
+        run: pip-audit -r requirements.txt --ignore-vuln GHSA-xxxx || true
+
+  # Secret scanning with gitleaks
+  gitleaks:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Container image scanning
+  trivy:
+    name: Container Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build broker image
+        working-directory: atb-gateway-go
+        run: docker build -f Dockerfile.broker -t atb-broker:scan .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'atb-broker:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # SAST with CodeQL
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
+
+  # OPA policy linting
+  opa-check:
+    name: OPA Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+
+      - name: Check OPA policy syntax
+        run: opa check opa/policy/
+
+      - name: Run OPA tests
+        run: opa test opa/policy/ -v --v0-compatible
+
+  # Helm chart security
+  helm-security:
+    name: Helm Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint charts/atb
+
+      - name: Install kubesec
+        run: |
+          curl -sSL https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz | tar xz
+          sudo mv kubesec /usr/local/bin/
+
+      - name: Template and scan Helm chart
+        run: |
+          helm template atb charts/atb > /tmp/rendered.yaml
+          kubesec scan /tmp/rendered.yaml || true
