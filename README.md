@@ -31,15 +31,15 @@ ATB provides a **single enforcement boundary** between AI agent platforms and en
 
 ## Key Features
 
-| Feature | Description |
-|---------|-------------|
-| **SPIFFE/SPIRE Identity** | X509-SVID for mTLS, JWT-SVID for external APIs, Federation for cross-domain trust |
-| **PoA Mandates** | Short-lived, signed authorization tokens with `act/con/leg` claims (AAP-001/002 style) |
-| **Risk-Tiered Policy** | 145+ enterprise actions across low/medium/high risk tiers |
-| **Dual Control** | High-risk actions require two distinct approvers |
-| **Semantic Guardrails** | Prompt injection detection with external service support |
-| **Immutable Audit** | Azure Blob/S3 Object Lock with hash-chain tamper evidence |
-| **Platform Binding** | OIDC platform tokens bound to SPIFFE identities |
+| Feature                   | Description                                                                            |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| **SPIFFE/SPIRE Identity** | X509-SVID for mTLS, JWT-SVID for external APIs, Federation for cross-domain trust      |
+| **PoA Mandates**          | Short-lived, signed authorization tokens with `act/con/leg` claims (AAP-001/002 style) |
+| **Risk-Tiered Policy**    | 145+ enterprise actions across low/medium/high risk tiers                              |
+| **Dual Control**          | High-risk actions require two distinct approvers                                       |
+| **Semantic Guardrails**   | Prompt injection detection with external service support                               |
+| **Immutable Audit**       | Azure Blob/S3 Object Lock with hash-chain tamper evidence                              |
+| **Platform Binding**      | OIDC platform tokens bound to SPIFFE identities                                        |
 
 ## Quick Start
 
@@ -70,12 +70,12 @@ kubectl logs -n atb -l app=atb-broker
 
 ### Components
 
-| Component | Description |
-|-----------|-------------|
-| `atb-broker` | Main enforcement gateway (Go) |
+| Component       | Description                                    |
+| --------------- | ---------------------------------------------- |
+| `atb-broker`    | Main enforcement gateway (Go)                  |
 | `atb-agentauth` | PoA issuance service with dual-control support |
-| `opa` | Policy decision engine (sidecar) |
-| `spire-agent` | SPIFFE workload identity |
+| `opa`           | Policy decision engine (sidecar)               |
+| `spire-agent`   | SPIFFE workload identity                       |
 
 ### Documentation
 
@@ -87,11 +87,11 @@ kubectl logs -n atb -l app=atb-broker
 
 ## Risk Tiers
 
-| Tier | Actions | Approval | Examples |
-|------|---------|----------|----------|
-| **High** | 60+ | Dual control (2 approvers) | SAP payments, PII export, IAM escalation |
-| **Medium** | 40+ | Single approver | CRM updates, order management |
-| **Low** | 45+ | PoA only | Read operations, status checks |
+| Tier       | Actions | Approval                   | Examples                                 |
+| ---------- | ------- | -------------------------- | ---------------------------------------- |
+| **High**   | 60+     | Dual control (2 approvers) | SAP payments, PII export, IAM escalation |
+| **Medium** | 40+     | Single approver            | CRM updates, order management            |
+| **Low**    | 45+     | PoA only                   | Read operations, status checks           |
 
 See [`docs/enterprise-actions.md`](docs/enterprise-actions.md) for the complete catalog.
 
@@ -99,15 +99,15 @@ See [`docs/enterprise-actions.md`](docs/enterprise-actions.md) for the complete 
 
 ### Environment Variables (Broker)
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SPIFFE_ENDPOINT_SOCKET` | SPIRE Workload API socket | `/run/spire/sockets/agent.sock` |
-| `OPA_DECISION_URL` | OPA policy endpoint | `http://localhost:8181/v1/data/atb/poa/decision` |
-| `PLATFORM_JWKS_URL` | Platform OIDC JWKS endpoint | - |
-| `POA_SINGLE_USE` | Enable PoA replay protection | `true` |
-| `ALLOW_UNMANDATED_LOW_RISK` | Allow low-risk without PoA | `false` |
-| `GUARDRAILS_URL` | External guardrails service | - |
-| `AUDIT_SINK_URL` | Audit event sink endpoint | - |
+| Variable                    | Description                  | Default                                          |
+| --------------------------- | ---------------------------- | ------------------------------------------------ |
+| `SPIFFE_ENDPOINT_SOCKET`    | SPIRE Workload API socket    | `/run/spire/sockets/agent.sock`                  |
+| `OPA_DECISION_URL`          | OPA policy endpoint          | `http://localhost:8181/v1/data/atb/poa/decision` |
+| `PLATFORM_JWKS_URL`         | Platform OIDC JWKS endpoint  | -                                                |
+| `POA_SINGLE_USE`            | Enable PoA replay protection | `true`                                           |
+| `ALLOW_UNMANDATED_LOW_RISK` | Allow low-risk without PoA   | `false`                                          |
+| `GUARDRAILS_URL`            | External guardrails service  | -                                                |
+| `AUDIT_SINK_URL`            | Audit event sink endpoint    | -                                                |
 
 ### Connectors
 

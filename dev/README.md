@@ -1,6 +1,7 @@
 # ATB Dev Harness (local)
 
 This folder provides a minimal **local** harness to exercise:
+
 - mTLS client cert with a **SPIFFE URI SAN** (for the Go gateway)
 - PoA minting (AAP-001 payload)
 - OPA policy evaluation using `opa/policy/poa.rego`
@@ -21,11 +22,13 @@ make run-broker     # Build and run the broker
 ## Manual Setup
 
 ### Prereqs
+
 - `openssl`
 - `opa` (downloaded locally) OR run OPA in a container
 - Python 3 (to mint PoA)
 
 ### 1) Generate local CA + server/client certs
+
 From repo root:
 
 ```bash
@@ -35,14 +38,17 @@ cd dev/certs && ./gen_certs.sh
 ```
 
 Outputs (generated):
+
 - `dev/certs/ca.crt`
 - `dev/certs/server.crt`, `dev/certs/server.key`
 - `dev/certs/client.crt`, `dev/certs/client.key`
 
 The client cert includes a SPIFFE URI SAN:
+
 - `spiffe://example.org/ns/default/sa/agent/connector`
 
 ## 2) Start OPA with the policy
+
 From repo root:
 
 ```bash
@@ -52,9 +58,11 @@ opa run --server --addr 127.0.0.1:8181 opa/policy/poa.rego
 ```
 
 Decision path:
+
 - `http://127.0.0.1:8181/v1/data/atb/poa/decision`
 
 ## 3) Start a simple upstream echo server
+
 From repo root:
 
 ```bash
@@ -66,6 +74,7 @@ make run-upstream
 This listens on `http://127.0.0.1:9000`.
 
 ## 4) Mint a PoA JWT (RS256)
+
 Generate a local RSA keypair (one-time):
 
 ```bash
@@ -87,6 +96,7 @@ Mint a 5-minute PoA mandate:
 ```
 
 ## 5) Run the Go gateway and call it
+
 From repo root:
 
 ```bash
@@ -124,6 +134,7 @@ curl -vk https://127.0.0.1:8443/sap/vendor/change \
 ```
 
 ### Quick deny checks
+
 - Same request but `dual_control: false` + `amount: 6000` should deny.
 - For Salesforce bulk export, try:
   - `act=salesforce.bulk.export`, `con.dataset_allowlist=["accounts"]`, `params.dataset="accounts"`, `row_count=5000`.
