@@ -60,7 +60,7 @@ cd atb-gateway-go && go test -v -race ./... && cd ..
 
 | Command | Description |
 |---------|-------------|
-| `make setup` | Install all dependencies |
+| `make setup` | Install all dependencies + pre-commit hooks |
 | `make test` | Run all tests (OPA + Go) |
 | `make test-opa` | Run OPA policy tests only |
 | `make test-go` | Run Go tests with race detection |
@@ -71,6 +71,29 @@ cd atb-gateway-go && go test -v -race ./... && cd ..
 | `make build` | Build Go binaries |
 | `make docker-build` | Build Docker images |
 | `make clean` | Remove build artifacts |
+
+### Pre-commit Hooks
+
+This project uses [pre-commit](https://pre-commit.com/) to run checks before each commit:
+
+```bash
+# Install pre-commit (if not already installed)
+brew install pre-commit
+
+# Install the hooks (done automatically by make setup)
+pre-commit install
+
+# Run hooks manually on all files
+pre-commit run --all-files
+```
+
+The hooks check:
+- Go formatting and tests
+- OPA policy formatting and tests
+- Secrets detection (gitleaks)
+- Markdown linting
+- Shell script linting
+- Helm chart validation
 
 ## Development Workflow
 

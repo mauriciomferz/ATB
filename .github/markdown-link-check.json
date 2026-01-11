@@ -1,0 +1,19 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^https://login\\.salesforce\\.com"
+    },
+    {
+      "pattern": "^http://localhost"
+    },
+    {
+      "pattern": "^http://127\\.0\\.0\\.1"
+    },
+    {
+      "pattern": "^https://issuer\\.example"
+    }
+  ],
+  "aliveStatusCodes": [200, 206, 301, 302, 403, 429],
+  "retryOn429": true,
+  "retryCount": 3
+}

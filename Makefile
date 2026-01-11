@@ -55,7 +55,7 @@ GOARCH ?= $(shell go env GOARCH)
 # Setup
 # ============================================================================
 
-setup: setup-go setup-python setup-tools
+setup: setup-go setup-python setup-tools setup-hooks
 	@echo "✅ Development environment ready!"
 
 setup-go:
@@ -75,6 +75,16 @@ setup-tools:
 	@which go >/dev/null 2>&1 || echo "⚠️  Go not found. Install from: https://go.dev/dl/"
 	@which docker >/dev/null 2>&1 || echo "⚠️  Docker not found. Install from: https://docker.com"
 	@which helm >/dev/null 2>&1 || echo "⚠️  Helm not found. Install with: brew install helm"
+
+setup-hooks:
+	@echo "🪝 Setting up pre-commit hooks..."
+	@if command -v pre-commit >/dev/null 2>&1; then \
+		pre-commit install; \
+		echo "✅ Pre-commit hooks installed"; \
+	else \
+		echo "⚠️  pre-commit not found. Install with: brew install pre-commit"; \
+		echo "   Then run: pre-commit install"; \
+	fi
 
 # ============================================================================
 # Testing
