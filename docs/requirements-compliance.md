@@ -70,3 +70,4 @@ Governance/legal:
 Ops/observability:
 
 - ~~Persist audit events to a central sink (e.g., Log Analytics / SIEM) with correlation IDs.~~ ✅ Done (`AUDIT_SINK_URL`, `AUDIT_SINK_AUTH` + Helm chart support)
+- ~~Add **SLOs and alerting** around broker/OPA/AgentAuth availability.~~ ✅ Done (`charts/atb/templates/prometheus-rules.yaml` with PrometheusRule)
