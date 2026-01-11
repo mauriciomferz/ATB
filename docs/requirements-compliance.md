@@ -60,7 +60,7 @@ Security/controls:
 
 - ~~Add **PoA replay protection** (e.g., bounded `jti` cache with TTL, optionally backed by Redis).~~ ✅ Done (`POA_SINGLE_USE`)
 - ~~Add **OIDC verification for agent-platform identity** (e.g., Entra ID JWT validation).~~ ✅ Done (`PLATFORM_JWKS_URL` et al.)
-- Tighten **low-risk policy** from “GET allowed” to an explicit allowlist of actions/paths and connector-level scoping.
+- ~~Tighten **low-risk policy** from "GET allowed" to an explicit allowlist of actions/paths and connector-level scoping.~~ ✅ Done (`low_risk_allowlist` + `low_risk_path_patterns` in `poa.rego`)
 
 Governance/legal:
 

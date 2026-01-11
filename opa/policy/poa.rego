@@ -214,13 +214,48 @@ decision := {"allow": false, "reason": "missing_required_fields"} {
 	not action_allowed
 }
 
-# Low-risk defaults
+# Low-risk action allowlist (no PoA required when ALLOW_UNMANDATED_LOW_RISK=true)
+# Each entry specifies action name and optional path pattern.
+# Extend this list per enterprise policy; prefer explicit actions over blanket method checks.
+
+low_risk_allowlist := [
+	# Read-only status/health checks
+	{"action": "system.health.check", "methods": ["GET"]},
+	{"action": "system.status.get", "methods": ["GET"]},
+
+	# FAQ and documentation queries
+	{"action": "kb.faq.query", "methods": ["GET", "POST"]},
+	{"action": "kb.docs.search", "methods": ["GET", "POST"]},
+
+	# Read-only reporting (non-PII, aggregated)
+	{"action": "reporting.dashboard.view", "methods": ["GET"]},
+	{"action": "reporting.metrics.get", "methods": ["GET"]},
+
+	# Agent introspection (own identity/capabilities)
+	{"action": "agent.self.capabilities", "methods": ["GET"]},
+	{"action": "agent.self.identity", "methods": ["GET"]},
+]
 
 low_risk_without_poa {
-	# Default interpretation for the skeleton: read-only traffic.
-	# Tighten by mapping to explicit action names and/or path allowlists.
-	input.request.method == "GET"
+	# Match against explicit allowlist
+	some i
+	entry := low_risk_allowlist[i]
+	input.request.action == entry.action
+	input.request.method == entry.methods[_]
 }
+
+# Fallback: allow GET on paths explicitly marked safe (e.g., /health, /ready, /metrics)
+low_risk_without_poa {
+	input.request.method == "GET"
+	low_risk_path_patterns[_] == input.request.path
+}
+
+low_risk_path_patterns := [
+	"/health",
+	"/ready",
+	"/metrics",
+	"/ping",
+]
 
 # Pilot actions
 
