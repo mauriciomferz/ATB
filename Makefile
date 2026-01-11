@@ -282,17 +282,17 @@ docs: ## Generate API documentation from OpenAPI specs
 load-test: ## Run k6 load test (requires k6)
 	@echo "🔥 Running load test..."
 	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
-	k6 run tests/load/broker_load.js
+	k6 run tests/load/atb_load.js
 
 load-stress: ## Run k6 stress test
 	@echo "🔥 Running stress test..."
 	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
-	k6 run --config tests/load/stress.json tests/load/broker_load.js
+	k6 run --config tests/load/stress.json tests/load/atb_load.js
 
 load-soak: ## Run k6 soak test (2 hours)
 	@echo "🔥 Running soak test (2 hours)..."
 	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
-	k6 run --config tests/load/soak.json tests/load/broker_load.js
+	k6 run --config tests/load/soak.json tests/load/atb_load.js
 
 # ============================================================================
 # Validation
