@@ -1,13 +1,16 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.22 AS build
+FROM --platform=$BUILDPLATFORM golang:1.25.5 AS build
 WORKDIR /src
+
+ARG TARGETOS
+ARG TARGETARCH
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/atb-agentauth ./cmd/agentauth
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/atb-agentauth ./cmd/agentauth
 
 FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /
