@@ -32,6 +32,14 @@ broker:
     POA_JWKS_URL: ""
     POA_JWKS_CACHE_SECONDS: "300"
     POA_VERIFY_PUBKEY_PEM: ""
+  secrets:
+    # If set, these override the corresponding plaintext env vars above.
+    poaJwksUrl:
+      name: ""
+      key: "poa_jwks_url"
+    poaVerifyPubkeyPem:
+      name: ""
+      key: "poa_verify_pubkey_pem"
   resources: {}
   securityContext:
     runAsNonRoot: true

@@ -78,7 +78,25 @@ If you want `/v1/approve` to require an approval token:
   - `agentauth.secrets.approvalSharedSecret.name: atb-agentauth-approval`
   - `agentauth.secrets.approvalSharedSecret.key: approval_shared_secret`
 
-## 4) Validate
+## 4) Optional: provide broker PoA verification secrets
+
+If you are **not** using AgentAuth JWKS (or want to override it), you can provide the broker PoA verification configuration via Kubernetes Secrets.
+
+### Static public key verification (`POA_VERIFY_PUBKEY_PEM`)
+
+- `kubectl -n <namespace> create secret generic atb-broker-poa-pubkey --from-file=poa_verify_pubkey_pem=poa_verify_pubkey.pem`
+- Set Helm values:
+  - `broker.secrets.poaVerifyPubkeyPem.name: atb-broker-poa-pubkey`
+  - `broker.secrets.poaVerifyPubkeyPem.key: poa_verify_pubkey_pem`
+
+### JWKS URL override (`POA_JWKS_URL`)
+
+- `kubectl -n <namespace> create secret generic atb-broker-jwks --from-literal=poa_jwks_url='https://issuer.example/.well-known/jwks.json'`
+- Set Helm values:
+  - `broker.secrets.poaJwksUrl.name: atb-broker-jwks`
+  - `broker.secrets.poaJwksUrl.key: poa_jwks_url`
+
+## 5) Validate
 
 - `helm test <release> -n <namespace> --timeout 5m`
 - Broker readiness endpoint:
