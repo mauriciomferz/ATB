@@ -32,6 +32,10 @@ broker:
     POA_JWKS_URL: ""
     POA_JWKS_CACHE_SECONDS: "300"
     POA_VERIFY_PUBKEY_PEM: ""
+    # Audit sink (SIEM/Log Analytics) - leave empty to use stdout only
+    AUDIT_SINK_URL: ""
+    AUDIT_SINK_BATCH_SIZE: "100"
+    AUDIT_SINK_FLUSH_SECONDS: "5"
   secrets:
     # If set, these override the corresponding plaintext env vars above.
     poaJwksUrl:
@@ -40,6 +44,10 @@ broker:
     poaVerifyPubkeyPem:
       name: ""
       key: "poa_verify_pubkey_pem"
+    # Audit sink auth (e.g., "Bearer <token>" or "SharedKey <workspace>:<sig>")
+    auditSinkAuth:
+      name: ""
+      key: "audit_sink_auth"
   resources: {}
   securityContext:
     runAsNonRoot: true

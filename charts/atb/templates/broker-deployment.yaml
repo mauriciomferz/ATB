@@ -62,6 +62,21 @@ spec:
               {{- end }}
             - name: LISTEN_ADDR
               value: ":{{ .Values.broker.service.mtlsPort }}"
+            {{- if .Values.broker.env.AUDIT_SINK_URL }}
+            - name: AUDIT_SINK_URL
+              value: {{ .Values.broker.env.AUDIT_SINK_URL | quote }}
+            - name: AUDIT_SINK_BATCH_SIZE
+              value: {{ .Values.broker.env.AUDIT_SINK_BATCH_SIZE | quote }}
+            - name: AUDIT_SINK_FLUSH_SECONDS
+              value: {{ .Values.broker.env.AUDIT_SINK_FLUSH_SECONDS | quote }}
+            {{- if .Values.broker.secrets.auditSinkAuth.name }}
+            - name: AUDIT_SINK_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.broker.secrets.auditSinkAuth.name | quote }}
+                  key: {{ .Values.broker.secrets.auditSinkAuth.key | quote }}
+            {{- end }}
+            {{- end }}
             {{- if eq .Values.broker.tls.mode "secret" }}
             - name: TLS_CERT_FILE
               value: /tls/tls.crt

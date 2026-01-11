@@ -47,6 +47,29 @@ Validate agent-platform access tokens (e.g., Entra ID) before PoA verification:
 
 The platform token is read from the `X-Platform-Token` header. When provided, claims (`sub`, `oid`, `appid`, `azp`, `iss`, `aud`) are included in OPA input as `input.platform` and in audit events as `platform_identity`.
 
+### Audit sink (SIEM/Log Analytics)
+
+Send audit events to a central sink in addition to stdout:
+
+- `AUDIT_SINK_URL` — HTTP endpoint to POST audit events (e.g., Azure Log Analytics Data Collector API, Splunk HEC, or a custom webhook)
+- `AUDIT_SINK_AUTH` — Authorization header value (e.g., `Bearer <token>`, `SharedKey <workspace-id>:<sig>`)
+- `AUDIT_SINK_BATCH_SIZE` (default `100`) — events are batched before sending
+- `AUDIT_SINK_FLUSH_SECONDS` (default `5`) — max seconds to buffer before flushing
+
+Events are sent as a JSON array of audit objects. The sink is non-blocking; if the queue fills up (10,000 events), new events are dropped with a warning.
+
+Example for Azure Log Analytics:
+```bash
+export AUDIT_SINK_URL="https://<workspace-id>.ods.opinsights.azure.com/api/logs?api-version=2016-04-01"
+export AUDIT_SINK_AUTH="SharedKey <workspace-id>:<signature>"
+```
+
+Example for Splunk HEC:
+```bash
+export AUDIT_SINK_URL="https://splunk.example.com:8088/services/collector/event"
+export AUDIT_SINK_AUTH="Splunk <hec-token>"
+```
+
 3. Build/run:
    - `go build ./cmd/broker`
    - `./broker`

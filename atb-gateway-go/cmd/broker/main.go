@@ -66,6 +66,160 @@ type AuditEvent struct {
 	Path             string                 `json:"path"`
 }
 
+// AuditSink defines an interface for sending audit events
+type AuditSink interface {
+	Send(ctx context.Context, ev AuditEvent) error
+	Close() error
+}
+
+// StdoutSink writes audit events to stdout (default)
+type StdoutSink struct{}
+
+func (s *StdoutSink) Send(_ context.Context, ev AuditEvent) error {
+	return json.NewEncoder(os.Stdout).Encode(ev)
+}
+
+func (s *StdoutSink) Close() error { return nil }
+
+// HTTPSink sends audit events to an HTTP endpoint (e.g., SIEM, Log Analytics)
+type HTTPSink struct {
+	url        string
+	authHeader string // e.g., "Bearer <token>" or "SharedKey <workspace-id>:<sig>"
+	httpClient *http.Client
+	queue      chan AuditEvent
+	wg         sync.WaitGroup
+	stopCh     chan struct{}
+}
+
+func newHTTPSink(sinkURL, authHeader string, batchSize int, flushInterval time.Duration) *HTTPSink {
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+	if flushInterval <= 0 {
+		flushInterval = 5 * time.Second
+	}
+	s := &HTTPSink{
+		url:        sinkURL,
+		authHeader: authHeader,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+		queue:      make(chan AuditEvent, 10000),
+		stopCh:     make(chan struct{}),
+	}
+	s.wg.Add(1)
+	go s.worker(batchSize, flushInterval)
+	return s
+}
+
+func (s *HTTPSink) Send(_ context.Context, ev AuditEvent) error {
+	select {
+	case s.queue <- ev:
+		return nil
+	default:
+		// Queue full, drop event but log warning
+		log.Printf("WARN: audit queue full, dropping event request_id=%s", ev.RequestID)
+		return errors.New("audit queue full")
+	}
+}
+
+func (s *HTTPSink) worker(batchSize int, flushInterval time.Duration) {
+	defer s.wg.Done()
+	batch := make([]AuditEvent, 0, batchSize)
+	ticker := time.NewTicker(flushInterval)
+	defer ticker.Stop()
+
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		if err := s.sendBatch(batch); err != nil {
+			log.Printf("ERROR: failed to send audit batch: %v", err)
+		}
+		batch = batch[:0]
+	}
+
+	for {
+		select {
+		case ev := <-s.queue:
+			batch = append(batch, ev)
+			if len(batch) >= batchSize {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
+		case <-s.stopCh:
+			// Drain remaining events
+			for {
+				select {
+				case ev := <-s.queue:
+					batch = append(batch, ev)
+				default:
+					flush()
+					return
+				}
+			}
+		}
+	}
+}
+
+func (s *HTTPSink) sendBatch(events []AuditEvent) error {
+	body, err := json.Marshal(events)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, s.url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.authHeader != "" {
+		req.Header.Set("Authorization", s.authHeader)
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("audit sink returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+func (s *HTTPSink) Close() error {
+	close(s.stopCh)
+	s.wg.Wait()
+	return nil
+}
+
+// MultiSink sends to multiple sinks (e.g., stdout + HTTP)
+type MultiSink struct {
+	sinks []AuditSink
+}
+
+func (m *MultiSink) Send(ctx context.Context, ev AuditEvent) error {
+	var lastErr error
+	for _, sink := range m.sinks {
+		if err := sink.Send(ctx, ev); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
+func (m *MultiSink) Close() error {
+	var lastErr error
+	for _, sink := range m.sinks {
+		if err := sink.Close(); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
+// Global audit sink (configured at startup)
+var auditSink AuditSink = &StdoutSink{}
+
 type OPAClient struct {
 	URL  string
 	HTTP *http.Client
@@ -553,7 +707,12 @@ func semanticGuardrails(params map[string]interface{}) (bool, string) {
 }
 
 func audit(ev AuditEvent) {
+	// Always log to stdout for container environments
 	_ = json.NewEncoder(os.Stdout).Encode(ev)
+	// Also send to configured sink if different from stdout
+	if _, isStdout := auditSink.(*StdoutSink); !isStdout {
+		_ = auditSink.Send(context.Background(), ev)
+	}
 }
 
 func main() {
@@ -573,6 +732,25 @@ func main() {
 	if httpListenAddr == "" {
 		httpListenAddr = ":8080"
 	}
+
+	// Configure audit sink (SIEM/Log Analytics)
+	auditSinkURL := strings.TrimSpace(os.Getenv("AUDIT_SINK_URL"))
+	auditSinkAuth := strings.TrimSpace(os.Getenv("AUDIT_SINK_AUTH")) // e.g., "Bearer <token>"
+	if auditSinkURL != "" {
+		batchSize := 100
+		if v := strings.TrimSpace(os.Getenv("AUDIT_SINK_BATCH_SIZE")); v != "" {
+			fmt.Sscanf(v, "%d", &batchSize)
+		}
+		flushSec := 5
+		if v := strings.TrimSpace(os.Getenv("AUDIT_SINK_FLUSH_SECONDS")); v != "" {
+			fmt.Sscanf(v, "%d", &flushSec)
+		}
+		auditSink = newHTTPSink(auditSinkURL, auditSinkAuth, batchSize, time.Duration(flushSec)*time.Second)
+		log.Printf("Audit sink configured: %s (batch=%d, flush=%ds)", auditSinkURL, batchSize, flushSec)
+		// Ensure graceful shutdown
+		defer auditSink.Close()
+	}
+
 	spiffeEndpointSocket := strings.TrimSpace(os.Getenv("SPIFFE_ENDPOINT_SOCKET"))
 	certFile := strings.TrimSpace(os.Getenv("TLS_CERT_FILE"))
 	keyFile := strings.TrimSpace(os.Getenv("TLS_KEY_FILE"))
