@@ -43,10 +43,12 @@ spec:
               value: {{ .Values.broker.env.POA_VERIFY_PUBKEY_PEM | quote }}
             - name: LISTEN_ADDR
               value: ":{{ .Values.broker.service.mtlsPort }}"
+            {{- if eq .Values.broker.tls.mode "secret" }}
             - name: TLS_CERT_FILE
               value: /tls/tls.crt
             - name: TLS_KEY_FILE
               value: /tls/tls.key
+            {{- end }}
             {{- if .Values.observability.otel.enabled }}
             - name: OTEL_SERVICE_NAME
               value: "atb-broker"
@@ -69,9 +71,11 @@ spec:
           securityContext:
 {{ toYaml .Values.broker.securityContext | indent 12 }}
           volumeMounts:
+            {{- if eq .Values.broker.tls.mode "secret" }}
             - name: tls
               mountPath: /tls
               readOnly: true
+            {{- end }}
             {{- if .Values.csi.enabled }}
             - name: spiffe-workload-api
               mountPath: {{ .Values.csi.mountPath }}
@@ -90,9 +94,11 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
       volumes:
+        {{- if eq .Values.broker.tls.mode "secret" }}
         - name: tls
           secret:
-            secretName: {{ .Release.Name }}-broker-tls
+            secretName: {{ default (printf "%s-broker-tls" .Release.Name) .Values.broker.tls.secretName }}
+        {{- end }}
         {{- if .Values.csi.enabled }}
         - name: spiffe-workload-api
           csi:

@@ -10,6 +10,12 @@ broker:
     tag: "0.1.0"
     pullPolicy: IfNotPresent
   replicas: 1
+  tls:
+    # "secret" = mount a Kubernetes TLS secret and run file-based TLS
+    # "spiffe" = run secret-less mTLS using SPIFFE Workload API (requires mounting the Workload API socket)
+    mode: secret
+    # Only used when mode=secret. If empty, defaults to "<release>-broker-tls".
+    secretName: ""
   service:
     type: ClusterIP
     mtlsPort: 8443
