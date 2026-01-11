@@ -23,6 +23,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
 )
 
 var (
@@ -170,6 +173,11 @@ func peerSPIFFEIDFromVerifiedCert(r *http.Request) (string, error) {
 		return "", errors.New("missing client certificate")
 	}
 	cert := r.TLS.PeerCertificates[0]
+	if cert != nil {
+		if id, err := x509svid.IDFromCert(cert); err == nil {
+			return id.String(), nil
+		}
+	}
 	for _, uri := range cert.URIs {
 		if uri != nil && strings.EqualFold(uri.Scheme, "spiffe") {
 			return uri.String(), nil
@@ -299,10 +307,12 @@ func main() {
 	if httpListenAddr == "" {
 		httpListenAddr = ":8080"
 	}
+	spiffeEndpointSocket := strings.TrimSpace(os.Getenv("SPIFFE_ENDPOINT_SOCKET"))
 	certFile := strings.TrimSpace(os.Getenv("TLS_CERT_FILE"))
 	keyFile := strings.TrimSpace(os.Getenv("TLS_KEY_FILE"))
-	if certFile == "" || keyFile == "" {
-		log.Fatal("TLS_CERT_FILE and TLS_KEY_FILE are required")
+	clientCAFile := strings.TrimSpace(os.Getenv("TLS_CLIENT_CA_FILE"))
+	if spiffeEndpointSocket == "" && (certFile == "" || keyFile == "") {
+		log.Fatal("either SPIFFE_ENDPOINT_SOCKET must be set (Workload API) or TLS_CERT_FILE/TLS_KEY_FILE must be provided")
 	}
 
 	maxTTLSec := envInt64("POA_MAX_TTL_SECONDS", 300)
@@ -444,10 +454,42 @@ func main() {
 		Addr:              listenAddr,
 		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
-		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			ClientAuth: tls.RequireAnyClientCert,
-		},
+		TLSConfig:         nil,
+	}
+
+	if spiffeEndpointSocket != "" {
+		// Secret-less mode: server and client identities come from the SPIFFE Workload API.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		source, err := workloadapi.NewX509Source(ctx, workloadapi.WithClientOptions(workloadapi.WithAddr(spiffeEndpointSocket)))
+		if err != nil {
+			log.Fatalf("failed to create X509Source: %v", err)
+		}
+		defer source.Close()
+
+		mtlsServer.TLSConfig = tlsconfig.MTLSServerConfig(source, source, tlsconfig.AuthorizeAny())
+		mtlsServer.TLSConfig.MinVersion = tls.VersionTLS12
+		// When using Workload API, certFile/keyFile are not needed.
+		certFile = ""
+		keyFile = ""
+	} else {
+		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+		if clientCAFile != "" {
+			b, err := os.ReadFile(clientCAFile)
+			if err != nil {
+				log.Fatalf("failed to read TLS_CLIENT_CA_FILE: %v", err)
+			}
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(b) {
+				log.Fatalf("failed to parse TLS_CLIENT_CA_FILE PEM")
+			}
+			tlsCfg.ClientCAs = pool
+			tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+		} else {
+			log.Printf("WARN: TLS_CLIENT_CA_FILE not set; client certs will not be verified (dev-only)")
+			tlsCfg.ClientAuth = tls.RequireAnyClientCert
+		}
+		mtlsServer.TLSConfig = tlsCfg
 	}
 
 	httpServer := &http.Server{

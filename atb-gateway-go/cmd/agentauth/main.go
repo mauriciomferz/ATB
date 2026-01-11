@@ -28,12 +28,12 @@ type ChallengeRequest struct {
 }
 
 type Challenge struct {
-	ID        string
-	Req       ChallengeRequest
-	CreatedAt time.Time
-	ExpiresAt time.Time
-	Approved  bool
-	Approver  string
+	ID         string
+	Req        ChallengeRequest
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	Approved   bool
+	Approver   string
 	ApprovedAt *time.Time
 }
 
@@ -245,8 +245,8 @@ func main() {
 		store.put(c)
 
 		writeJSON(w, 200, map[string]interface{}{
-			"challenge_id": c.ID,
-			"expires_at":   c.ExpiresAt.Format(time.RFC3339),
+			"challenge_id":  c.ID,
+			"expires_at":    c.ExpiresAt.Format(time.RFC3339),
 			"approval_hint": "POST /v1/approve with challenge_id (this skeleton simulates MFA/approval)",
 		})
 	})
@@ -347,9 +347,9 @@ func main() {
 			return
 		}
 		writeJSON(w, 200, map[string]interface{}{
-			"token": jwtStr,
+			"token":      jwtStr,
 			"expires_at": exp.Time.Format(time.RFC3339),
-			"jti": claims.ID,
+			"jti":        claims.ID,
 		})
 	})
 
