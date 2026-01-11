@@ -240,6 +240,10 @@ demo: ## Run interactive demo showing risk tiers (requires OPA running)
 test-e2e: ## Run end-to-end tests (requires OPA running)
 	@./dev/test_e2e.sh
 
+test-integration: ## Run Go integration tests (requires OPA running)
+	@echo "🔍 Running Go integration tests..."
+	cd $(GO_DIR) && go test -tags=integration -v ./cmd/broker
+
 # ============================================================================
 # Cleanup
 # ============================================================================
