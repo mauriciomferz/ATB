@@ -41,3 +41,5 @@ The issued PoA JWT includes:
 - `iat`, `exp`, `jti`
 
 Use the JWKS endpoint to configure the broker’s PoA verification (future step: broker fetches JWKS instead of static PEM).
+
+The broker already supports JWKS-based verification via `POA_JWKS_URL` (recommended) and can fall back to a static PEM via `POA_VERIFY_PUBKEY_PEM`.
