@@ -1,0 +1,138 @@
+# ====================
+# ATB Project .gitignore
+# ====================
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ====================
+# Go
+# ====================
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# Build outputs
+/atb-gateway-go/bin/
+/atb-gateway-go/dist/
+
+# ====================
+# Python
+# ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ====================
+# Development
+# ====================
+
+# Local dev certificates (generated)
+dev/certs/ca.crt
+dev/certs/ca.key
+dev/certs/ca.srl
+dev/certs/server.crt
+dev/certs/server.key
+dev/certs/server.csr
+dev/certs/client.crt
+dev/certs/client.key
+dev/certs/client.csr
+dev/certs/client_ext.cnf
+
+# PoA signing keys (local dev only)
+dev/poa_rsa.key
+dev/poa_rsa.pub
+
+# ====================
+# IDE / Editors
+# ====================
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ====================
+# Kubernetes / Helm
+# ====================
+*.kubeconfig
+charts/**/charts/
+charts/**/*.tgz
+
+# ====================
+# Docker
+# ====================
+docker-compose.override.yml
+
+# ====================
+# Logs
+# ====================
+*.log
+logs/
+
+# ====================
+# Secrets (never commit!)
+# ====================
+*.pem
+*.p12
+*.pfx
+secrets/
+*.secret
+.env.local
+.env.*.local

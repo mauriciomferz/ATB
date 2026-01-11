@@ -18,6 +18,25 @@ Please be respectful and professional in all interactions.
 
 ### Development Setup
 
+#### Quick Setup (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/mauriciomferz/ATB.git
+cd ATB
+
+# Run the setup target (installs all dependencies)
+make setup
+
+# Generate local development certificates
+make certs
+
+# Run all tests
+make test
+```
+
+#### Manual Setup
+
 ```bash
 # Clone the repository
 git clone https://github.com/mauriciomferz/ATB.git
@@ -26,8 +45,9 @@ cd ATB
 # Install Go dependencies
 cd atb-gateway-go && go mod download && cd ..
 
-# Install Python dependencies (for guardrails)
-cd guardrails-sidecar && pip install -r requirements.txt && cd ..
+# Install Python dependencies
+python3 -m venv .venv
+.venv/bin/pip install -r atb-gateway-py/requirements.txt
 
 # Run OPA tests
 opa test opa/policy/ -v --v0-compatible
@@ -35,6 +55,22 @@ opa test opa/policy/ -v --v0-compatible
 # Run Go tests
 cd atb-gateway-go && go test -v -race ./... && cd ..
 ```
+
+### Available Make Targets
+
+| Command | Description |
+|---------|-------------|
+| `make setup` | Install all dependencies |
+| `make test` | Run all tests (OPA + Go) |
+| `make test-opa` | Run OPA policy tests only |
+| `make test-go` | Run Go tests with race detection |
+| `make lint` | Run linters (OPA + Go) |
+| `make certs` | Generate local dev certificates |
+| `make run-opa` | Start OPA server (localhost:8181) |
+| `make run-broker` | Build and run the broker |
+| `make build` | Build Go binaries |
+| `make docker-build` | Build Docker images |
+| `make clean` | Remove build artifacts |
 
 ## Development Workflow
 
@@ -57,14 +93,15 @@ Follow the code style and conventions in existing files.
 ### 4. Run All Tests Locally
 
 ```bash
+# Using Makefile (recommended)
+make test
+
+# Or manually:
 # OPA tests
 opa test opa/policy/ -v --v0-compatible
 
 # Go tests
 cd atb-gateway-go && go test -v -race ./... && cd ..
-
-# Python tests (if applicable)
-cd guardrails-sidecar && pytest && cd ..
 ```
 
 ### 5. Submit a Pull Request
@@ -183,11 +220,13 @@ latencyHistogram.WithLabelValues("action").Observe(duration.Seconds())
 | Document | Purpose |
 |----------|---------|
 | `README.md` | Project overview and quickstart |
-| `docs/architecture.md` | System design and components |
+| `docs/k8s-quickstart.md` | Kubernetes deployment guide |
 | `docs/operating-model.md` | Deployment and operations |
 | `docs/enterprise-actions.md` | Action catalog reference |
+| `docs/audit.md` | Audit event format and sinks |
 | `docs/requirements-compliance.md` | Compliance matrix |
 | `SECURITY.md` | Security policy and controls |
+| `CONTRIBUTING.md` | Contribution guidelines |
 
 ### Style Guide
 

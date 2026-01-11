@@ -1,0 +1,110 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run All Tests",
+            "type": "shell",
+            "command": "make test",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run OPA Tests",
+            "type": "shell",
+            "command": "opa test opa/policy/ -v --v0-compatible",
+            "group": "test",
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Go Tests",
+            "type": "shell",
+            "command": "cd atb-gateway-go && go test -v -race ./...",
+            "group": "test",
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": "$go"
+        },
+        {
+            "label": "Start OPA Server",
+            "type": "shell",
+            "command": "opa run --server --addr 127.0.0.1:8181 opa/policy/poa.rego",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^$"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^.*$",
+                    "endsPattern": "^.*Serving.*$"
+                }
+            }
+        },
+        {
+            "label": "Start Upstream Echo",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python dev/upstream_echo.py",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Broker",
+            "type": "shell",
+            "command": "make build-broker",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "silent"
+            },
+            "problemMatcher": "$go"
+        },
+        {
+            "label": "Generate Dev Certs",
+            "type": "shell",
+            "command": "make certs",
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Lint All",
+            "type": "shell",
+            "command": "make lint",
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Setup Development Environment",
+            "type": "shell",
+            "command": "make setup",
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

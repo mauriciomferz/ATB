@@ -1,0 +1,49 @@
+{
+    "editor.formatOnSave": true,
+    "editor.rulers": [100],
+    
+    // Go settings
+    "go.lintTool": "golangci-lint",
+    "go.lintOnSave": "package",
+    "go.testOnSave": false,
+    "go.coverOnSave": false,
+    "go.buildTags": "",
+    "go.testFlags": ["-v", "-race"],
+    "[go]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    
+    // Python settings
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    
+    // OPA/Rego settings
+    "[rego]": {
+        "editor.formatOnSave": true
+    },
+    
+    // File associations
+    "files.associations": {
+        "*.rego": "rego",
+        "*.tpl": "helm",
+        "values*.yaml": "helm"
+    },
+    
+    // Search exclusions
+    "search.exclude": {
+        "**/.venv": true,
+        "**/node_modules": true,
+        "**/.git": true,
+        "**/coverage.out": true
+    },
+    
+    // Task auto-detection
+    "task.autoDetect": "on"
+}

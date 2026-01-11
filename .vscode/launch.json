@@ -1,0 +1,57 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Broker",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/atb-gateway-go/cmd/broker",
+            "cwd": "${workspaceFolder}/atb-gateway-go",
+            "env": {
+                "OPA_DECISION_URL": "http://localhost:8181/v1/data/atb/poa/decision",
+                "SPIFFE_ENDPOINT_SOCKET": "/run/spire/sockets/agent.sock"
+            }
+        },
+        {
+            "name": "Debug AgentAuth",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/atb-gateway-go/cmd/agentauth",
+            "cwd": "${workspaceFolder}/atb-gateway-go"
+        },
+        {
+            "name": "Debug Broker Tests",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/atb-gateway-go/cmd/broker",
+            "args": ["-test.v"]
+        },
+        {
+            "name": "Python: FastAPI Gateway",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": ["app.main:app", "--reload", "--port", "8000"],
+            "cwd": "${workspaceFolder}/atb-gateway-py",
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Python: Upstream Echo",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/dev/upstream_echo.py",
+            "python": "${workspaceFolder}/.venv/bin/python"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Full Stack (OPA + Broker)",
+            "configurations": ["Debug Broker"],
+            "preLaunchTask": "Start OPA Server",
+            "stopAll": true
+        }
+    ]
+}
