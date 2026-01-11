@@ -42,6 +42,10 @@ help:
 	@echo "  make lint           - Run linters (OPA + Go)"
 	@echo "  make fmt            - Format code (Go)"
 	@echo "  make check          - Run all checks (lint + test)"
+	@echo "  make validate       - Validate all configs and policies"
+	@echo ""
+	@echo "Documentation:"
+	@echo "  make docs           - Generate API documentation"
 	@echo ""
 	@echo "Build:"
 	@echo "  make build          - Build Go binaries"
@@ -256,6 +260,24 @@ test-e2e: ## Run end-to-end tests (requires OPA running)
 test-integration: ## Run Go integration tests (requires OPA running)
 	@echo "🔍 Running Go integration tests..."
 	cd $(GO_DIR) && go test -tags=integration -v ./cmd/broker
+
+# ============================================================================
+# Documentation
+# ============================================================================
+
+docs: ## Generate API documentation from OpenAPI specs
+	@echo "📚 Generating API documentation..."
+	@chmod +x ./scripts/gen_api_docs.sh
+	@./scripts/gen_api_docs.sh
+
+# ============================================================================
+# Validation
+# ============================================================================
+
+validate: ## Validate all configuration and policy files
+	@echo "🔍 Validating all configurations..."
+	@chmod +x ./scripts/validate_all.sh
+	@./scripts/validate_all.sh
 
 # ============================================================================
 # Cleanup

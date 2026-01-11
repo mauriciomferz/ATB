@@ -136,3 +136,12 @@ secrets/
 *.secret
 .env.local
 .env.*.local
+# ====================
+# Linting / Code Quality Tools
+# ====================
+.trunk/
+
+# ====================
+# Generated API Docs
+# ====================
+docs/api/
