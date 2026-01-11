@@ -1,0 +1,37 @@
+# Docker Compose for minimal local testing
+#
+# Usage:
+#   docker compose -f docker-compose.minimal.yaml up -d
+#
+# This starts only OPA and the upstream echo server,
+# allowing you to run the broker locally for debugging.
+
+services:
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: atb-opa-minimal
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./opa/policy:/policy:ro
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=debug"
+      - "/policy/poa.rego"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  upstream:
+    image: python:3.11-slim
+    container_name: atb-upstream-minimal
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./dev/upstream_echo.py:/app/upstream_echo.py:ro
+    working_dir: /app
+    command: ["python", "upstream_echo.py"]

@@ -1,0 +1,125 @@
+# Docker Compose for Local ATB Development
+#
+# Usage:
+#   docker compose up -d        # Start all services
+#   docker compose logs -f      # Follow logs
+#   docker compose down         # Stop all services
+#
+# Services:
+#   - opa:        Policy engine on :8181
+#   - upstream:   Echo server for testing on :9000
+#   - broker:     ATB broker on :8443 (HTTPS) and :8080 (metrics)
+#   - agentauth:  PoA issuance service on :8444
+
+services:
+  # ==========================================================================
+  # OPA Policy Engine
+  # ==========================================================================
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: atb-opa
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./opa/policy:/policy:ro
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=info"
+      - "/policy/poa.rego"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - atb-network
+
+  # ==========================================================================
+  # Upstream Echo Server (for testing)
+  # ==========================================================================
+  upstream:
+    image: python:3.11-slim
+    container_name: atb-upstream
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./dev/upstream_echo.py:/app/upstream_echo.py:ro
+    working_dir: /app
+    command: ["python", "upstream_echo.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - atb-network
+
+  # ==========================================================================
+  # ATB Broker
+  # ==========================================================================
+  broker:
+    build:
+      context: ./atb-gateway-go
+      dockerfile: Dockerfile.broker
+    container_name: atb-broker
+    ports:
+      - "8443:8443"   # HTTPS (mTLS)
+      - "8080:8080"   # Metrics/health
+    environment:
+      - UPSTREAM_URL=http://upstream:9000
+      - OPA_DECISION_URL=http://opa:8181/v1/data/atb/poa/decision
+      - TLS_CERT_FILE=/certs/server.crt
+      - TLS_KEY_FILE=/certs/server.key
+      - TLS_CA_FILE=/certs/ca.crt
+      - POA_JWKS_URL=http://agentauth:8444/.well-known/jwks.json
+      - POA_MAX_TTL_SECONDS=300
+      - POA_SINGLE_USE=true
+      - ALLOW_UNMANDATED_LOW_RISK=false
+      - LOG_LEVEL=info
+    volumes:
+      - ./dev/certs:/certs:ro
+      - ./config/connectors.example.json:/config/connectors.json:ro
+    depends_on:
+      opa:
+        condition: service_healthy
+      upstream:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - atb-network
+
+  # ==========================================================================
+  # ATB AgentAuth (PoA Issuance)
+  # ==========================================================================
+  agentauth:
+    build:
+      context: ./atb-gateway-go
+      dockerfile: Dockerfile.agentauth
+    container_name: atb-agentauth
+    ports:
+      - "8444:8444"
+    environment:
+      - LISTEN_ADDR=:8444
+      - HIGH_RISK_ACTIONS=sap.payment.execute,sap.vendor.bank_change,salesforce.bulk.export
+      - CHALLENGE_TTL=300
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8444/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - atb-network
+
+networks:
+  atb-network:
+    driver: bridge
+
+volumes:
+  certs:

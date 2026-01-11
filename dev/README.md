@@ -6,6 +6,36 @@ This folder provides a minimal **local** harness to exercise:
 - PoA minting (AAP-001 payload)
 - OPA policy evaluation using `opa/policy/poa.rego`
 
+## Quick Start (using Docker Compose)
+
+The fastest way to get started is with Docker Compose:
+
+```bash
+# Generate certificates first
+make certs
+
+# Start the full stack (OPA, Upstream, Broker, AgentAuth)
+make docker-up
+
+# Or start minimal stack for local broker debugging
+make docker-up-minimal
+
+# View logs
+make docker-logs
+
+# Stop all services
+make docker-down
+```
+
+**Services started by `docker-up`:**
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| OPA | http://localhost:8181 | Policy engine |
+| Upstream | http://localhost:9000 | Echo server for testing |
+| Broker | https://localhost:8443 | ATB broker (mTLS) |
+| AgentAuth | http://localhost:8444 | PoA issuance service |
+
 ## Quick Start (using Makefile)
 
 From the repo root, you can use the Makefile for common tasks:

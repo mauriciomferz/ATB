@@ -25,6 +25,13 @@ help:
 	@echo "  make run-upstream   - Start echo upstream server"
 	@echo "  make run-broker     - Build and run the broker"
 	@echo ""
+	@echo "Docker:"
+	@echo "  make docker-build   - Build Docker images"
+	@echo "  make docker-up      - Start full stack (OPA, Upstream, Broker, AgentAuth)"
+	@echo "  make docker-up-minimal - Start minimal stack (OPA + Upstream only)"
+	@echo "  make docker-down    - Stop all containers"
+	@echo "  make docker-logs    - Follow container logs"
+	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint           - Run linters (OPA + Go)"
 	@echo "  make fmt            - Format code (Go)"
@@ -32,7 +39,6 @@ help:
 	@echo ""
 	@echo "Build:"
 	@echo "  make build          - Build Go binaries"
-	@echo "  make docker-build   - Build Docker images"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean          - Remove build artifacts"
@@ -198,6 +204,31 @@ docker-build:
 	@echo "🐳 Building Docker images..."
 	docker build -f $(GO_DIR)/Dockerfile.broker -t atb-broker:latest $(GO_DIR)
 	docker build -f $(GO_DIR)/Dockerfile.agentauth -t atb-agentauth:latest $(GO_DIR)
+
+docker-up:
+	@echo "🐳 Starting Docker Compose stack..."
+	docker compose up -d
+	@echo "✅ Services started:"
+	@echo "   OPA:        http://localhost:8181"
+	@echo "   Upstream:   http://localhost:9000"
+	@echo "   Broker:     https://localhost:8443 (mTLS)"
+	@echo "   AgentAuth:  http://localhost:8444"
+
+docker-up-minimal:
+	@echo "🐳 Starting minimal Docker Compose stack (OPA + Upstream only)..."
+	docker compose -f docker-compose.minimal.yaml up -d
+	@echo "✅ Services started:"
+	@echo "   OPA:        http://localhost:8181"
+	@echo "   Upstream:   http://localhost:9000"
+
+docker-down:
+	@echo "🐳 Stopping Docker Compose stack..."
+	docker compose down
+	docker compose -f docker-compose.minimal.yaml down 2>/dev/null || true
+	@echo "✅ Services stopped"
+
+docker-logs:
+	docker compose logs -f
 
 # ============================================================================
 # Cleanup
