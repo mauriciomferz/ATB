@@ -62,6 +62,30 @@ jobs:
           python -m pip install pip-audit
           python -m pip_audit -r requirements.txt
 
+  opa-policy-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+
+      - name: OPA check (syntax validation)
+        run: opa check opa/policy/
+
+      - name: OPA test (policy unit tests)
+        run: opa test opa/policy/ -v --v0-compatible
+
+      - name: OPA coverage report
+        run: |
+          opa test opa/policy/ --coverage --format=json --v0-compatible > coverage.json
+          echo "### OPA Policy Coverage" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat coverage.json | jq '.coverage' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
   build-and-push-images:
     runs-on: ubuntu-latest
     steps:
@@ -139,7 +163,7 @@ jobs:
           path: dist/*.tgz
 
   deploy-staging:
-    needs: [lint-and-package, build-and-push-images, security-audit]
+    needs: [lint-and-package, build-and-push-images, security-audit, opa-policy-test]
     runs-on: ubuntu-latest
     environment: staging
     steps:
