@@ -65,7 +65,7 @@ Security/controls:
 Governance/legal:
 
 - ~~Define a **`leg` schema** (jurisdiction, accountable party, approval references) and enforce it in policy.~~ ✅ Done (`schemas/poa-leg.schema.json`, OPA rules in `poa.rego`)
-- Implement **dual control** flow in AgentAuth for actions marked high risk.
+- ~~Implement **dual control** flow in AgentAuth for actions marked high risk.~~ ✅ Done (`DUAL_CONTROL_ACTIONS`, `leg.dual_control.required`)
 
 Ops/observability:
 

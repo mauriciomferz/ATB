@@ -27,14 +27,19 @@ type ChallengeRequest struct {
 	Leg           map[string]interface{} `json:"leg"`
 }
 
+type Approver struct {
+	ID         string    `json:"id"`
+	ApprovedAt time.Time `json:"approved_at"`
+}
+
 type Challenge struct {
-	ID         string
-	Req        ChallengeRequest
-	CreatedAt  time.Time
-	ExpiresAt  time.Time
-	Approved   bool
-	Approver   string
-	ApprovedAt *time.Time
+	ID                 string
+	Req                ChallengeRequest
+	CreatedAt          time.Time
+	ExpiresAt          time.Time
+	Approved           bool
+	Approvers          []Approver // For dual control: need 2 distinct approvers
+	RequiresDualControl bool
 }
 
 type Store struct {
@@ -121,6 +126,41 @@ func readJSON(r *http.Request, out interface{}) error {
 	return dec.Decode(out)
 }
 
+// requiresDualControl checks if the request requires two approvers.
+// This is determined by:
+//   1. leg.dual_control.required == true (explicit in request)
+//   2. Action is in the high-risk action list (configurable via env)
+func requiresDualControl(req ChallengeRequest, highRiskActions []string) bool {
+	// Check leg.dual_control.required
+	if dc, ok := req.Leg["dual_control"].(map[string]interface{}); ok {
+		if required, ok := dc["required"].(bool); ok && required {
+			return true
+		}
+	}
+	// Check against high-risk action list
+	for _, a := range highRiskActions {
+		if req.Act == a {
+			return true
+		}
+	}
+	return false
+}
+
+// parseHighRiskActions reads a comma-separated list of actions from env
+func parseHighRiskActions(envVal string) []string {
+	if envVal == "" {
+		return nil
+	}
+	parts := strings.Split(envVal, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
 func main() {
 	listenAddr := strings.TrimSpace(os.Getenv("LISTEN_ADDR"))
 	if listenAddr == "" {
@@ -156,6 +196,19 @@ func main() {
 	}
 
 	approvalToken := strings.TrimSpace(os.Getenv("APPROVAL_SHARED_SECRET"))
+
+	// High-risk actions that always require dual control (comma-separated)
+	highRiskActions := parseHighRiskActions(os.Getenv("DUAL_CONTROL_ACTIONS"))
+	if len(highRiskActions) == 0 {
+		// Default high-risk actions requiring dual control
+		highRiskActions = []string{
+			"sap.vendor.change",
+			"iam.privilege.escalate",
+			"payments.transfer.execute",
+			"ot.system.manual_override",
+		}
+	}
+	log.Printf("Dual control required for actions: %v", highRiskActions)
 
 	var priv ed25519.PrivateKey
 	var pub ed25519.PublicKey
@@ -214,6 +267,43 @@ func main() {
 		writeJSON(w, 200, jwks)
 	})
 
+	// GET /v1/challenge/{id} - check challenge status
+	mux.HandleFunc("/v1/challenge/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, "/v1/challenge/")
+		if id == "" {
+			http.Error(w, "missing challenge_id in path", http.StatusBadRequest)
+			return
+		}
+		c, ok := store.get(id)
+		if !ok {
+			http.Error(w, "unknown challenge", http.StatusNotFound)
+			return
+		}
+		now := time.Now().UTC()
+		expired := now.After(c.ExpiresAt)
+		approversNeeded := 1
+		if c.RequiresDualControl {
+			approversNeeded = 2
+		}
+		writeJSON(w, 200, map[string]interface{}{
+			"challenge_id":          c.ID,
+			"action":                c.Req.Act,
+			"agent_spiffe_id":       c.Req.AgentSPIFFEID,
+			"created_at":            c.CreatedAt.Format(time.RFC3339),
+			"expires_at":            c.ExpiresAt.Format(time.RFC3339),
+			"expired":               expired,
+			"requires_dual_control": c.RequiresDualControl,
+			"approvers_needed":      approversNeeded,
+			"approvers_count":       len(c.Approvers),
+			"approvers":             c.Approvers,
+			"fully_approved":        c.Approved,
+		})
+	})
+
 	mux.HandleFunc("/v1/challenge", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -236,18 +326,28 @@ func main() {
 		}
 
 		now := time.Now().UTC()
+		needsDualControl := requiresDualControl(req, highRiskActions)
 		c := &Challenge{
-			ID:        mustRandID("chal_"),
-			Req:       req,
-			CreatedAt: now,
-			ExpiresAt: now.Add(time.Duration(challengeTTLSec) * time.Second),
+			ID:                  mustRandID("chal_"),
+			Req:                 req,
+			CreatedAt:           now,
+			ExpiresAt:           now.Add(time.Duration(challengeTTLSec) * time.Second),
+			Approvers:           []Approver{},
+			RequiresDualControl: needsDualControl,
 		}
 		store.put(c)
 
+		approversNeeded := 1
+		if needsDualControl {
+			approversNeeded = 2
+		}
+
 		writeJSON(w, 200, map[string]interface{}{
-			"challenge_id":  c.ID,
-			"expires_at":    c.ExpiresAt.Format(time.RFC3339),
-			"approval_hint": "POST /v1/approve with challenge_id (this skeleton simulates MFA/approval)",
+			"challenge_id":      c.ID,
+			"expires_at":        c.ExpiresAt.Format(time.RFC3339),
+			"requires_dual_control": needsDualControl,
+			"approvers_needed":  approversNeeded,
+			"approval_hint":     "POST /v1/approve with challenge_id and approver identity",
 		})
 	})
 
@@ -273,8 +373,13 @@ func main() {
 			return
 		}
 		id := strings.TrimSpace(body.ChallengeID)
+		approverID := strings.TrimSpace(body.Approver)
 		if id == "" {
 			http.Error(w, "missing challenge_id", http.StatusBadRequest)
+			return
+		}
+		if approverID == "" {
+			http.Error(w, "missing approver", http.StatusBadRequest)
 			return
 		}
 		c, ok := store.get(id)
@@ -287,10 +392,39 @@ func main() {
 			http.Error(w, "challenge expired", http.StatusGone)
 			return
 		}
-		c.Approved = true
-		c.Approver = strings.TrimSpace(body.Approver)
-		c.ApprovedAt = &now
-		writeJSON(w, 200, map[string]interface{}{"status": "approved"})
+
+		// Check if this approver already approved
+		for _, a := range c.Approvers {
+			if a.ID == approverID {
+				http.Error(w, "approver already approved this challenge", http.StatusConflict)
+				return
+			}
+		}
+
+		// Add this approver
+		c.Approvers = append(c.Approvers, Approver{
+			ID:         approverID,
+			ApprovedAt: now,
+		})
+
+		// Determine how many approvers are needed
+		approversNeeded := 1
+		if c.RequiresDualControl {
+			approversNeeded = 2
+		}
+
+		// Mark as approved if sufficient approvers
+		if len(c.Approvers) >= approversNeeded {
+			c.Approved = true
+		}
+
+		writeJSON(w, 200, map[string]interface{}{
+			"status":            "approved",
+			"approvers_count":   len(c.Approvers),
+			"approvers_needed":  approversNeeded,
+			"fully_approved":    c.Approved,
+			"approvers":         c.Approvers,
+		})
 	})
 
 	mux.HandleFunc("/v1/mandate", func(w http.ResponseWriter, r *http.Request) {
@@ -321,8 +455,37 @@ func main() {
 			return
 		}
 		if !c.Approved {
-			http.Error(w, "challenge not approved", http.StatusForbidden)
+			approversNeeded := 1
+			if c.RequiresDualControl {
+				approversNeeded = 2
+			}
+			writeJSON(w, http.StatusForbidden, map[string]interface{}{
+				"error":             "challenge not fully approved",
+				"approvers_count":   len(c.Approvers),
+				"approvers_needed":  approversNeeded,
+				"requires_dual_control": c.RequiresDualControl,
+			})
 			return
+		}
+
+		// Enrich leg with approval metadata
+		legCopy := make(map[string]interface{})
+		for k, v := range c.Req.Leg {
+			legCopy[k] = v
+		}
+		// Add dual_control info if applicable
+		if c.RequiresDualControl {
+			approversList := make([]map[string]interface{}, len(c.Approvers))
+			for i, a := range c.Approvers {
+				approversList[i] = map[string]interface{}{
+					"id":          a.ID,
+					"approved_at": a.ApprovedAt.Format(time.RFC3339),
+				}
+			}
+			legCopy["dual_control"] = map[string]interface{}{
+				"required":  true,
+				"approvers": approversList,
+			}
 		}
 
 		iat := jwt.NewNumericDate(now)
@@ -330,7 +493,7 @@ func main() {
 		claims := &PoAClaims{
 			Act: c.Req.Act,
 			Con: c.Req.Con,
-			Leg: c.Req.Leg,
+			Leg: legCopy,
 			RegisteredClaims: jwt.RegisteredClaims{
 				Issuer:    issuer,
 				Subject:   c.Req.AgentSPIFFEID,
@@ -347,9 +510,11 @@ func main() {
 			return
 		}
 		writeJSON(w, 200, map[string]interface{}{
-			"token":      jwtStr,
-			"expires_at": exp.Time.Format(time.RFC3339),
-			"jti":        claims.ID,
+			"token":             jwtStr,
+			"expires_at":        exp.Time.Format(time.RFC3339),
+			"jti":               claims.ID,
+			"dual_control_used": c.RequiresDualControl,
+			"approvers_count":   len(c.Approvers),
 		})
 	})
 
