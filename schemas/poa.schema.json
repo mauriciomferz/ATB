@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atb.example.com/schemas/poa.schema.json",
+  "title": "Proof-of-Authorization (PoA) Mandate",
+  "description": "Schema for a complete PoA mandate token (AAP-001/002 style) used by ATB for agent action authorization.",
+  "type": "object",
+  "required": ["sub", "act", "con", "leg", "iat", "exp", "jti"],
+  "properties": {
+    "sub": {
+      "type": "string",
+      "description": "Subject - SPIFFE ID of the agent authorized to use this mandate.",
+      "pattern": "^spiffe://[a-zA-Z0-9._-]+/.*$",
+      "examples": ["spiffe://atb.example/agent/copilot-prod", "spiffe://atb.example/workload/crm-agent"]
+    },
+    "act": {
+      "type": "string",
+      "description": "Action - the authorized action identifier (dot-separated namespace).",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "examples": ["sap.vendor.change", "salesforce.bulk.export", "crm.contact.update"]
+    },
+    "con": {
+      "type": "object",
+      "description": "Constraints - action-specific parameters and limits.",
+      "additionalProperties": true,
+      "properties": {
+        "params": {
+          "type": "object",
+          "description": "Action parameters (e.g., amount, vendor_id, dataset).",
+          "additionalProperties": true
+        },
+        "constraints": {
+          "type": "object",
+          "description": "Policy constraints (e.g., max_rows, liability_cap, dataset_allowlist).",
+          "additionalProperties": true
+        }
+      }
+    },
+    "leg": {
+      "$ref": "poa-leg.schema.json",
+      "description": "Legal grounding - jurisdiction, accountable party, approval references."
+    },
+    "iat": {
+      "type": "integer",
+      "description": "Issued At - Unix timestamp when the mandate was issued.",
+      "minimum": 0
+    },
+    "exp": {
+      "type": "integer",
+      "description": "Expiration - Unix timestamp when the mandate expires (max 5 minutes from iat recommended).",
+      "minimum": 0
+    },
+    "jti": {
+      "type": "string",
+      "description": "JWT ID - unique identifier for replay protection.",
+      "minLength": 8,
+      "examples": ["550e8400-e29b-41d4-a716-446655440000", "poa_abc123def456"]
+    },
+    "iss": {
+      "type": "string",
+      "description": "Issuer - SPIFFE ID of the AgentAuth service that issued this mandate.",
+      "pattern": "^spiffe://[a-zA-Z0-9._-]+/.*$",
+      "examples": ["spiffe://atb.example/service/agentauth"]
+    },
+    "aud": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Audience - SPIFFE ID(s) of the broker(s) authorized to accept this mandate.",
+      "examples": ["spiffe://atb.example/service/broker", ["spiffe://atb.example/service/broker-east", "spiffe://atb.example/service/broker-west"]]
+    }
+  },
+  "examples": [
+    {
+      "sub": "spiffe://atb.example/agent/copilot-prod",
+      "act": "sap.vendor.change",
+      "con": {
+        "params": {
+          "vendor_id": "V-12345",
+          "amount": 5000
+        },
+        "constraints": {
+          "liability_cap": 10000,
+          "dual_control": false
+        }
+      },
+      "leg": {
+        "jurisdiction": "DE",
+        "accountable_party": {
+          "type": "user",
+          "id": "alice@example.com",
+          "display_name": "Alice Smith"
+        },
+        "approval_ref": "SNOW-CHG0012345"
+      },
+      "iat": 1700000000,
+      "exp": 1700000300,
+      "jti": "poa_abc123def456",
+      "iss": "spiffe://atb.example/service/agentauth",
+      "aud": "spiffe://atb.example/service/broker"
+    },
+    {
+      "sub": "spiffe://atb.example/agent/hr-assistant",
+      "act": "hr.employee.export_pii",
+      "con": {
+        "params": {
+          "purpose": "audit",
+          "record_count": 50
+        },
+        "constraints": {
+          "max_pii_export": 500
+        }
+      },
+      "leg": {
+        "jurisdiction": "EU",
+        "accountable_party": {
+          "type": "user",
+          "id": "bob@example.com"
+        },
+        "dual_control": {
+          "required": true,
+          "approvers": [
+            { "type": "user", "id": "manager@example.com" },
+            { "type": "role", "id": "compliance-officer" }
+          ],
+          "approved_at": "2024-01-15T10:00:00Z"
+        },
+        "regulation_refs": ["GDPR", "SOX"]
+      },
+      "iat": 1700000000,
+      "exp": 1700000300,
+      "jti": "poa_hr_export_789",
+      "iss": "spiffe://atb.example/service/agentauth",
+      "aud": "spiffe://atb.example/service/broker"
+    }
+  ]
+}
