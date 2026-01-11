@@ -48,6 +48,16 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
+      - name: Go unit tests
+        working-directory: atb-gateway-go
+        run: go test ./... -v -race -coverprofile=coverage.out
+
+      - name: Go coverage summary
+        working-directory: atb-gateway-go
+        run: |
+          echo "### Go Test Coverage" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage.out | tail -1 >> $GITHUB_STEP_SUMMARY
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
