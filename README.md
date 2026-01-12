@@ -80,16 +80,19 @@ kubectl logs -n atb -l app=atb-broker
 
 ### Documentation
 
+- [Getting Started](docs/getting-started.md) - Quick start guide for developers
 - [Architecture Guide](docs/architecture.md) - System design and components
+- [Authentication Guide](docs/authentication.md) - SPIFFE identity and PoA tokens
 - [API Reference - Broker](docs/openapi.yaml) - OpenAPI spec for ATB Broker
 - [API Reference - AgentAuth](docs/openapi-agentauth.yaml) - OpenAPI spec for AgentAuth
 - [Client Examples](examples/) - Python and Go client implementations
 - [Observability Guide](docs/observability.md) - Metrics, logging, alerting
 - [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
+- [FAQ](docs/faq.md) - Frequently asked questions
 - [Kubernetes Quickstart](docs/k8s-quickstart.md) - Deployment guide
 - [Operating Model](docs/operating-model.md) - RACI, approval flows, risk thresholds
 - [Enterprise Actions](docs/enterprise-actions.md) - 145+ actions with constraint rules
-- [Audit Schema](docs/audit.md) - Event format and sink configuration
+- [Audit Events](docs/audit.md) - Event format, SIEM integration, querying
 - [Requirements Compliance](docs/requirements-compliance.md) - Architecture alignment
 
 ## Risk Tiers
