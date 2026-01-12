@@ -4,7 +4,10 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -42,7 +45,7 @@ func ExecuteBatch(
 			defer wg.Done()
 
 			// Build PoA for this operation
-			poa := atb.NewPoABuilder().
+			poa, err := atb.NewPoABuilder().
 				ForAgent("spiffe://atb.example/agent/batch-processor").
 				Action(operation.Action).
 				WithParams(map[string]any{
@@ -57,6 +60,13 @@ func ExecuteBatch(
 					},
 				}).
 				Build()
+			if err != nil {
+				results[idx] = BatchResult{
+					Operation: operation,
+					Error:     err,
+				}
+				return
+			}
 
 			// Execute
 			result, err := client.Execute(ctx, poa, privateKey)
@@ -81,7 +91,7 @@ func main() {
 	defer client.Close()
 
 	// Load private key (in production, use secure key management)
-	privateKey, err := atb.LoadPrivateKey("./private.pem")
+	privateKey, err := loadPrivateKey("./private.pem")
 	if err != nil {
 		fmt.Println("Warning: Could not load private key, using demo mode")
 		privateKey = nil
@@ -102,7 +112,7 @@ func main() {
 	results := ExecuteBatch(ctx, client, privateKey, operations, "batch-user@example.com")
 
 	// Print results
-	fmt.Println("\n=== Batch Execution Results ===\n")
+	fmt.Println("\n=== Batch Execution Results ===")
 	successful := 0
 	failed := 0
 
@@ -120,4 +130,33 @@ func main() {
 	}
 
 	fmt.Printf("\nSummary: %d succeeded, %d failed\n", successful, failed)
+}
+
+// loadPrivateKey loads an ECDSA private key from a PEM file.
+func loadPrivateKey(path string) (*ecdsa.PrivateKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read key file: %w", err)
+	}
+
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		// Try PKCS8 format
+		pkcs8Key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse private key: %w", err)
+		}
+		ecKey, ok := pkcs8Key.(*ecdsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("key is not an ECDSA private key")
+		}
+		return ecKey, nil
+	}
+
+	return key, nil
 }

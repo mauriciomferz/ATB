@@ -2,6 +2,9 @@ package atb
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,8 +80,8 @@ func TestClientExecute(t *testing.T) {
 		}
 
 		// Verify path
-		if r.URL.Path != "/api/v1/execute" {
-			t.Errorf("expected /api/v1/execute, got %s", r.URL.Path)
+		if r.URL.Path != "/v1/action" {
+			t.Errorf("expected /v1/action, got %s", r.URL.Path)
 		}
 
 		// Verify authorization header
@@ -89,12 +92,11 @@ func TestClientExecute(t *testing.T) {
 
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Audit-ID", "aud_123")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{
 			"success": true,
-			"result": {"vendor_id": "V-001", "name": "Test Vendor"},
-			"audit_id": "aud_123",
-			"risk_tier": "LOW"
+			"data": {"vendor_id": "V-001", "name": "Test Vendor"}
 		}`))
 	}))
 	defer server.Close()
@@ -110,7 +112,7 @@ func TestClientExecute(t *testing.T) {
 	defer client.Close()
 
 	// Build a PoA
-	poa := NewPoABuilder().
+	poa, err := NewPoABuilder().
 		ForAgent("spiffe://example.com/agent/test").
 		Action("sap.vendor.read").
 		WithParams(map[string]any{"vendor_id": "V-001"}).
@@ -122,14 +124,26 @@ func TestClientExecute(t *testing.T) {
 			},
 		}).
 		Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
 
-	// Execute (without private key for test - would need mocking)
+	// Generate a test private key
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate test key: %v", err)
+	}
+
+	// Execute with the test private key
 	ctx := context.Background()
-	result, err := client.Execute(ctx, poa, nil)
+	result, err := client.Execute(ctx, poa, privateKey)
 
-	// For this test, we expect an error since we don't have a valid private key
-	// In a real test, we would mock the signing
-	if err == nil && result != nil {
+	// Check the result
+	if err != nil {
+		t.Errorf("Execute() error = %v", err)
+		return
+	}
+	if result != nil {
 		if !result.Success {
 			t.Error("expected success")
 		}
@@ -142,8 +156,8 @@ func TestClientExecute(t *testing.T) {
 func TestClientCheckPolicy(t *testing.T) {
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/policy/check" {
-			t.Errorf("expected /api/v1/policy/check, got %s", r.URL.Path)
+		if r.URL.Path != "/v1/policy/check" {
+			t.Errorf("expected /v1/policy/check, got %s", r.URL.Path)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -181,27 +195,22 @@ func TestClientCheckPolicy(t *testing.T) {
 func TestClientGetAuditLog(t *testing.T) {
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/audit" {
-			t.Errorf("expected /api/v1/audit, got %s", r.URL.Path)
+		if r.URL.Path != "/v1/audit" {
+			t.Errorf("expected /v1/audit, got %s", r.URL.Path)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
-			"entries": [
-				{
-					"id": "aud_123",
-					"timestamp": "2024-01-01T00:00:00Z",
-					"action": "sap.vendor.read",
-					"agent": "spiffe://example.com/agent/test",
-					"decision": "allow",
-					"risk_tier": "LOW"
-				}
-			],
-			"total": 1,
-			"limit": 100,
-			"offset": 0
-		}`))
+		w.Write([]byte(`[
+			{
+				"id": "aud_123",
+				"timestamp": "2024-01-01T00:00:00Z",
+				"action": "sap.vendor.read",
+				"agent": "spiffe://example.com/agent/test",
+				"decision": "allow",
+				"risk_tier": "LOW"
+			}
+		]`))
 	}))
 	defer server.Close()
 
