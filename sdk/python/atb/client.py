@@ -5,17 +5,17 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
 
 import httpx
 
-from atb.poa import PoA, PoABuilder
 from atb.exceptions import (
     ATBError,
     AuthorizationDeniedError,
     ConnectionError,
     ValidationError,
 )
+from atb.poa import PoA, PoABuilder
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +25,10 @@ class ActionResult:
     """Result of an action execution."""
 
     success: bool
-    data: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    audit_id: Optional[str] = None
-    decision: Optional[str] = None  # "allow" or "deny"
+    data: dict[str, Any] | None = None
+    error: str | None = None
+    audit_id: str | None = None
+    decision: str | None = None  # "allow" or "deny"
 
     def __bool__(self) -> bool:
         return self.success
@@ -42,9 +42,9 @@ class ATBConfig:
     agentauth_url: str = "http://localhost:8081"
     timeout: float = 30.0
     verify_ssl: bool = True
-    private_key_path: Optional[str] = None
-    cert_path: Optional[str] = None
-    spiffe_endpoint: Optional[str] = None  # Unix socket path for workload API
+    private_key_path: str | None = None
+    cert_path: str | None = None
+    spiffe_endpoint: str | None = None  # Unix socket path for workload API
 
 
 class ATBClient:
@@ -72,15 +72,15 @@ class ATBClient:
         ...     print(f"Action completed: {result.data}")
     """
 
-    def __init__(self, config: Optional[ATBConfig] = None) -> None:
+    def __init__(self, config: ATBConfig | None = None) -> None:
         """Initialize the ATB client.
 
         Args:
             config: ATB configuration. Uses defaults if not provided.
         """
         self.config = config or ATBConfig()
-        self._private_key: Optional[str] = None
-        self._http_client: Optional[httpx.Client] = None
+        self._private_key: str | None = None
+        self._http_client: httpx.Client | None = None
 
     def _get_http_client(self) -> httpx.Client:
         """Get or create HTTP client."""
@@ -96,15 +96,15 @@ class ATBClient:
         if self._private_key is None:
             if not self.config.private_key_path:
                 raise ATBError("Private key path not configured")
-            with open(self.config.private_key_path, "r") as f:
+            with open(self.config.private_key_path) as f:
                 self._private_key = f.read()
         return self._private_key
 
     def execute(
         self,
         poa: PoA,
-        private_key: Optional[str] = None,
-        headers: Optional[Dict[str, str]] = None,
+        private_key: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> ActionResult:
         """Execute an action with a PoA mandate.
 
@@ -145,7 +145,7 @@ class ATBClient:
             raise ConnectionError(
                 f"Failed to connect to broker: {e}",
                 endpoint=self.config.broker_url,
-            )
+            ) from e
 
         # Parse response
         try:
@@ -174,7 +174,7 @@ class ATBClient:
                 data=data,
             )
 
-    def validate_poa(self, token: str, public_key: Optional[str] = None) -> PoA:
+    def validate_poa(self, token: str, public_key: str | None = None) -> PoA:
         """Validate a PoA JWT token.
 
         Args:
@@ -199,16 +199,16 @@ class ATBClient:
                 raise ConnectionError(
                     f"Failed to fetch JWKS: {e}",
                     endpoint=self.config.agentauth_url,
-                )
+                ) from e
 
         return PoA.from_jwt(token, public_key)
 
     def check_policy(
         self,
         action: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         agent_spiffe_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Check if an action would be allowed without executing it.
 
         Args:
@@ -234,15 +234,15 @@ class ATBClient:
             raise ConnectionError(
                 f"Failed to check policy: {e}",
                 endpoint=self.config.broker_url,
-            )
+            ) from e
 
     def get_audit_log(
         self,
-        audit_id: Optional[str] = None,
-        action: Optional[str] = None,
-        agent: Optional[str] = None,
+        audit_id: str | None = None,
+        action: str | None = None,
+        agent: str | None = None,
         limit: int = 100,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Retrieve audit log entries.
 
         Args:
@@ -274,7 +274,7 @@ class ATBClient:
             raise ConnectionError(
                 f"Failed to fetch audit log: {e}",
                 endpoint=self.config.broker_url,
-            )
+            ) from e
 
     def close(self) -> None:
         """Close the HTTP client."""
@@ -292,12 +292,12 @@ class ATBClient:
 # Convenience function for one-off actions
 def execute_action(
     action: str,
-    params: Dict[str, Any],
+    params: dict[str, Any],
     agent_spiffe_id: str,
     accountable_user: str,
     jurisdiction: str = "GLOBAL",
     broker_url: str = "http://localhost:8080",
-    private_key: Optional[str] = None,
+    private_key: str | None = None,
     **constraints: Any,
 ) -> ActionResult:
     """Execute an action with minimal configuration.

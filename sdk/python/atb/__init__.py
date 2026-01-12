@@ -7,14 +7,14 @@ This SDK provides a simple interface for:
 """
 
 from atb.client import ATBClient
-from atb.poa import PoA, PoABuilder, AccountableParty, LegalGrounding
 from atb.exceptions import (
     ATBError,
     AuthorizationDeniedError,
+    ConnectionError,
     TokenExpiredError,
     ValidationError,
-    ConnectionError,
 )
+from atb.poa import AccountableParty, LegalGrounding, PoA, PoABuilder
 
 __version__ = "0.1.0"
 __all__ = [

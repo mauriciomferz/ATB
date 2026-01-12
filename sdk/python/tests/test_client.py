@@ -1,11 +1,12 @@
 """Tests for ATB client."""
 
-import pytest
 import httpx
+import pytest
 import respx
-from atb.client import ATBClient, ATBConfig, ActionResult, execute_action
-from atb.poa import PoABuilder, AccountableParty
-from atb.exceptions import AuthorizationDeniedError, ConnectionError
+
+from atb.client import ActionResult, ATBClient, ATBConfig
+from atb.exceptions import AuthorizationDeniedError
+from atb.poa import AccountableParty, PoABuilder
 
 
 class TestActionResult:
@@ -57,9 +58,9 @@ class TestATBClient:
     def test_execute_success(self, tmp_path):
         """Test successful action execution."""
         # Create a test private key
+        from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import ec
-        from cryptography.hazmat.backends import default_backend
 
         private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
         pem = private_key.private_bytes(
@@ -105,9 +106,9 @@ class TestATBClient:
     @respx.mock
     def test_execute_denied(self, tmp_path):
         """Test action denied by policy."""
+        from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import ec
-        from cryptography.hazmat.backends import default_backend
 
         private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
         pem = private_key.private_bytes(

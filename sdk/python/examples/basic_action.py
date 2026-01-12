@@ -1,6 +1,6 @@
 """Basic example of using the ATB SDK."""
 
-from atb import ATBClient, ATBConfig, PoABuilder, AccountableParty
+from atb import AccountableParty, ATBClient, ATBConfig, PoABuilder
 
 
 def main():
@@ -37,7 +37,7 @@ def main():
         result = client.execute(poa)
 
         if result.success:
-            print(f"✅ Action completed successfully!")
+            print("✅ Action completed successfully!")
             print(f"   Audit ID: {result.audit_id}")
             print(f"   Response: {result.data}")
         else:

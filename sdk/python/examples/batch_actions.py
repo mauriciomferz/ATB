@@ -7,16 +7,15 @@ with proper error handling and result aggregation.
 """
 
 import asyncio
-from typing import List
 
-from atb import AsyncATBClient, PoABuilder, AccountableParty, ActionResult
+from atb import AccountableParty, ActionResult, AsyncATBClient, PoABuilder
 
 
 async def execute_batch_actions(
     client: AsyncATBClient,
     private_key: str,
     user_email: str,
-) -> List[ActionResult]:
+) -> list[ActionResult]:
     """Execute a batch of vendor operations."""
 
     # Define batch of actions

@@ -6,8 +6,8 @@ This example demonstrates how to query and analyze audit logs
 from the ATB broker.
 """
 
-from datetime import datetime, timedelta
 from collections import Counter
+from datetime import datetime, timedelta
 
 from atb import ATBClient, ATBConfig
 
@@ -31,26 +31,26 @@ def analyze_audit_logs(client: ATBClient, hours: int = 24):
 
     # Analyze by decision
     decisions = Counter(log.get("decision") for log in logs)
-    print(f"\nBy Decision:")
+    print("\nBy Decision:")
     print(f"  Allowed: {decisions.get('allow', 0)}")
     print(f"  Denied: {decisions.get('deny', 0)}")
 
     # Analyze by risk tier
     risk_tiers = Counter(log.get("risk_tier") for log in logs)
-    print(f"\nBy Risk Tier:")
+    print("\nBy Risk Tier:")
     for tier in ["LOW", "MEDIUM", "HIGH"]:
         count = risk_tiers.get(tier, 0)
         print(f"  {tier}: {count}")
 
     # Analyze by action
     actions = Counter(log.get("action") for log in logs)
-    print(f"\nTop 5 Actions:")
+    print("\nTop 5 Actions:")
     for action, count in actions.most_common(5):
         print(f"  {action}: {count}")
 
     # Analyze by agent
     agents = Counter(log.get("agent", "").split("/")[-1] for log in logs)
-    print(f"\nTop 5 Agents:")
+    print("\nTop 5 Agents:")
     for agent, count in agents.most_common(5):
         print(f"  {agent}: {count}")
 
@@ -73,10 +73,11 @@ def export_logs_csv(client: ATBClient, filename: str = "audit_logs.csv"):
     logs = client.get_audit_logs(limit=10000)
 
     with open(filename, "w", newline="") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=["timestamp", "action", "agent", "decision", "risk_tier", "duration_ms", "audit_id"],
-        )
+        fieldnames = [
+            "timestamp", "action", "agent", "decision",
+            "risk_tier", "duration_ms", "audit_id"
+        ]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for log in logs:
             writer.writerow({

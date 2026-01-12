@@ -1,15 +1,17 @@
 """Tests for PoA data structures and builder."""
 
 import time
+
 import pytest
+
+from atb.exceptions import ValidationError
 from atb.poa import (
+    AccountableParty,
+    DualControl,
+    LegalGrounding,
     PoA,
     PoABuilder,
-    AccountableParty,
-    LegalGrounding,
-    DualControl,
 )
-from atb.exceptions import ValidationError
 
 
 class TestAccountableParty:

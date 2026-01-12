@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 
 class ATBError(Exception):
     """Base exception for all ATB SDK errors."""
 
-    def __init__(self, message: str, details: Optional[dict] = None):
+    def __init__(self, message: str, details: dict | None = None):
         super().__init__(message)
         self.message = message
         self.details = details or {}
@@ -17,7 +15,7 @@ class ATBError(Exception):
 class AuthorizationDeniedError(ATBError):
     """Raised when OPA denies the action."""
 
-    def __init__(self, message: str, reason: Optional[str] = None, details: Optional[dict] = None):
+    def __init__(self, message: str, reason: str | None = None, details: dict | None = None):
         super().__init__(message, details)
         self.reason = reason or "Policy evaluation denied the action"
 
@@ -32,7 +30,7 @@ class TokenExpiredError(ATBError):
 class ValidationError(ATBError):
     """Raised when PoA validation fails."""
 
-    def __init__(self, message: str, field: Optional[str] = None):
+    def __init__(self, message: str, field: str | None = None):
         super().__init__(message)
         self.field = field
 
@@ -40,6 +38,6 @@ class ValidationError(ATBError):
 class ConnectionError(ATBError):
     """Raised when connection to ATB services fails."""
 
-    def __init__(self, message: str, endpoint: Optional[str] = None):
+    def __init__(self, message: str, endpoint: str | None = None):
         super().__init__(message)
         self.endpoint = endpoint

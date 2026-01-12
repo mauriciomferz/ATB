@@ -1,8 +1,8 @@
 """Example of high-risk action with dual control."""
 
-from atb import ATBClient, ATBConfig, PoABuilder, AccountableParty
-from atb.poa import DualControl
+from atb import AccountableParty, ATBClient, ATBConfig, PoABuilder
 from atb.exceptions import AuthorizationDeniedError
+from atb.poa import DualControl
 
 
 def main():
@@ -59,19 +59,19 @@ def main():
             result = client.execute(poa)
 
             if result.success:
-                print(f"✅ High-risk action approved!")
-                print(f"   Payment ID: PAY-2024-001")
-                print(f"   Amount: €500,000")
+                print("✅ High-risk action approved!")
+                print("   Payment ID: PAY-2024-001")
+                print("   Amount: €500,000")
                 print(f"   Audit ID: {result.audit_id}")
-                print(f"   Keep this for compliance records.")
+                print("   Keep this for compliance records.")
             else:
                 print(f"⚠️ Action completed with warnings: {result.error}")
 
         except AuthorizationDeniedError as e:
-            print(f"❌ Action DENIED by policy")
+            print("❌ Action DENIED by policy")
             print(f"   Reason: {e.reason}")
             print(f"   Details: {e.details}")
-            print(f"\n   This denial has been logged for audit purposes.")
+            print("\n   This denial has been logged for audit purposes.")
 
 
 if __name__ == "__main__":

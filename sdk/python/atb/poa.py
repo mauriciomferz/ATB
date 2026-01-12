@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
-from typing import Any, List, Literal, Optional, Union
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 import jwt
 
@@ -19,7 +18,7 @@ class AccountableParty:
 
     type: Literal["user", "service_account", "org_unit", "role"]
     id: str
-    display_name: Optional[str] = None
+    display_name: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary, excluding None values."""
@@ -34,8 +33,8 @@ class DualControl:
     """Dual-control / four-eyes approval metadata."""
 
     required: bool
-    approver: Optional[AccountableParty] = None
-    approved_at: Optional[str] = None
+    approver: AccountableParty | None = None
+    approved_at: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -53,10 +52,10 @@ class LegalGrounding:
 
     jurisdiction: str
     accountable_party: AccountableParty
-    approval_ref: Optional[str] = None
-    dual_control: Optional[DualControl] = None
-    regulation_refs: List[str] = field(default_factory=list)
-    retention_days: Optional[int] = None
+    approval_ref: str | None = None
+    dual_control: DualControl | None = None
+    regulation_refs: list[str] = field(default_factory=list)
+    retention_days: int | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -89,8 +88,8 @@ class PoA:
     jti: str  # JWT ID for replay protection
 
     # Optional fields
-    iss: Optional[str] = None  # Issuer SPIFFE ID
-    aud: Optional[Union[str, List[str]]] = None  # Audience SPIFFE ID(s)
+    iss: str | None = None  # Issuer SPIFFE ID
+    aud: str | list[str] | None = None  # Audience SPIFFE ID(s)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JWT encoding."""
@@ -155,7 +154,7 @@ class PoA:
             raise ValidationError("Jurisdiction is required", field="leg.jurisdiction")
 
     @classmethod
-    def from_jwt(cls, token: str, public_key: str, algorithms: Optional[List[str]] = None) -> PoA:
+    def from_jwt(cls, token: str, public_key: str, algorithms: list[str] | None = None) -> PoA:
         """Decode and verify a JWT to create a PoA.
 
         Args:
@@ -173,9 +172,9 @@ class PoA:
         try:
             payload = jwt.decode(token, public_key, algorithms=algorithms)
         except jwt.ExpiredSignatureError:
-            raise ValidationError("Token has expired")
+            raise ValidationError("Token has expired") from None
         except jwt.InvalidTokenError as e:
-            raise ValidationError(f"Invalid token: {e}")
+            raise ValidationError(f"Invalid token: {e}") from e
 
         leg_data = payload["leg"]
         accountable_party = AccountableParty(
@@ -226,14 +225,14 @@ class PoABuilder:
     """Builder for creating PoA mandates with a fluent interface."""
 
     def __init__(self) -> None:
-        self._sub: Optional[str] = None
-        self._act: Optional[str] = None
+        self._sub: str | None = None
+        self._act: str | None = None
         self._params: dict[str, Any] = {}
         self._constraints: dict[str, Any] = {}
-        self._leg: Optional[LegalGrounding] = None
+        self._leg: LegalGrounding | None = None
         self._ttl: int = 300  # Default 5 minutes
-        self._iss: Optional[str] = None
-        self._aud: Optional[Union[str, List[str]]] = None
+        self._iss: str | None = None
+        self._aud: str | list[str] | None = None
 
     def for_agent(self, spiffe_id: str) -> PoABuilder:
         """Set the subject (agent SPIFFE ID).
@@ -285,10 +284,10 @@ class PoABuilder:
         self,
         jurisdiction: str,
         accountable_party: AccountableParty,
-        approval_ref: Optional[str] = None,
-        dual_control: Optional[DualControl] = None,
-        regulation_refs: Optional[List[str]] = None,
-        retention_days: Optional[int] = None,
+        approval_ref: str | None = None,
+        dual_control: DualControl | None = None,
+        regulation_refs: list[str] | None = None,
+        retention_days: int | None = None,
     ) -> PoABuilder:
         """Set legal grounding.
 
@@ -328,7 +327,7 @@ class PoABuilder:
         self._iss = spiffe_id
         return self
 
-    def audience(self, spiffe_id: Union[str, List[str]]) -> PoABuilder:
+    def audience(self, spiffe_id: str | list[str]) -> PoABuilder:
         """Set the audience SPIFFE ID(s).
 
         Args:
