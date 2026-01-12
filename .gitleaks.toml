@@ -1,0 +1,24 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks
+
+title = "ATB Gitleaks Configuration"
+
+# Allowlist patterns for false positives
+[allowlist]
+  description = "Allowlist for known false positives"
+  
+  # These are Kubernetes Secret key names, not actual secrets
+  regexTarget = "match"
+  regexes = [
+    # The string "ed25519_privkey_pem" is a key name in a K8s Secret, not a secret itself
+    '''ed25519_privkey_pem''',
+    # Approval shared secret key name
+    '''approval_shared_secret''',
+  ]
+  
+  # Paths that should be ignored (example test/dev certs)
+  paths = [
+    '''dev/certs/.*''',
+    '''.*_test\.go''',
+    '''.*\.example\..*''',
+  ]
