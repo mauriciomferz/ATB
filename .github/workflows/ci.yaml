@@ -75,9 +75,18 @@ jobs:
 
       - name: Load policy into OPA
         run: |
-          curl -X PUT http://localhost:8181/v1/policies/atb \
+          echo "Loading policy into OPA..."
+          response=$(curl -s -w "\n%{http_code}" -X PUT http://localhost:8181/v1/policies/atb \
             -H "Content-Type: text/plain" \
-            --data-binary @opa/policy/poa.rego
+            --data-binary @opa/policy/poa.rego)
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+          echo "HTTP $http_code - Response: $body"
+          if [ "$http_code" != "200" ]; then
+            echo "Failed to load policy into OPA"
+            exit 1
+          fi
+          echo "Policy loaded successfully"
 
       - name: Generate test certs and keys
         run: |
