@@ -9,6 +9,13 @@ broker:
   env:
     UPSTREAM_URL: "http://upstream.atb.svc.cluster.local:9000"
 
+agentauth:
+  replicas: 2
+  secrets:
+    signingKey:
+      name: atb-agentauth-signing-key
+      key: ed25519_privkey_pem
+
 opa:
   replicas: 2
 

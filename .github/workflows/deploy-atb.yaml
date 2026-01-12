@@ -83,7 +83,7 @@ jobs:
           version: latest
 
       - name: OPA check (syntax validation)
-        run: opa check opa/policy/
+        run: opa check --v0-compatible opa/policy/
 
       - name: OPA test (policy unit tests)
         run: opa test opa/policy/ -v --v0-compatible

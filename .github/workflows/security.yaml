@@ -127,7 +127,7 @@ jobs:
           version: latest
 
       - name: Check OPA policy syntax
-        run: opa check opa/policy/
+        run: opa check --v0-compatible opa/policy/
 
       - name: Run OPA tests
         run: opa test opa/policy/ -v --v0-compatible
