@@ -112,8 +112,10 @@ opa:
     name: ""
   image:
     repository: openpolicyagent/opa
-    tag: "0.66.0"
+    tag: "latest"
     pullPolicy: IfNotPresent
+  # Enable v0-compatible mode for legacy Rego policies (OPA 1.0+)
+  v0Compatible: true
   replicas: 1
   service:
     type: ClusterIP

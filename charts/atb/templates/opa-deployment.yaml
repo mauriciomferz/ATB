@@ -27,6 +27,9 @@ spec:
             - run
             - --server
             - --addr=0.0.0.0:8181
+            {{- if .Values.opa.v0Compatible }}
+            - --v0-compatible
+            {{- end }}
             - /policy/{{ .Values.policy.regoKey }}
           ports:
             - name: http

@@ -7,4 +7,4 @@ metadata:
 {{ include "atb.labels" . | indent 4 }}
 data:
   {{ .Values.policy.regoKey }}: |
-{{- .Files.Get "../../opa/policy/poa.rego" | nindent 4 }}
+{{- .Files.Get "files/poa.rego" | nindent 4 }}
