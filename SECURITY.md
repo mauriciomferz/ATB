@@ -5,7 +5,7 @@
 If you discover a security vulnerability in ATB, please report it responsibly:
 
 1. **Do NOT** create a public GitHub issue
-2. Email: security@example.com (replace with your security team email)
+2. Email: mauricio.fernandez_fernandez@siemens.com (replace with your security team email)
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce

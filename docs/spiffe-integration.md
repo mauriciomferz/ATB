@@ -30,11 +30,11 @@ ATB uses SPIFFE/SPIRE to provide cryptographic workload identity without long-li
          │ Workload API                   │ Workload API
          ▼                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                            SPIRE Agent (per node)                                    │
-│                                                                                      │
+│                            SPIRE Agent (per node)                                   │
+│                                                                                     │
 │  • Issues X.509 SVIDs (short-lived certificates) - for mTLS                         │
 │  • Issues JWT-SVIDs (short-lived JWTs) - for external APIs                          │
-│  • Attests workloads via selectors (k8s:ns, k8s:sa, docker:label)                  │
+│  • Attests workloads via selectors (k8s:ns, k8s:sa, docker:label)                   │
 │  • Automatic certificate rotation (default: 10 minutes)                             │
 └────────────────────────────────────────────┬────────────────────────────────────────┘
                                              │

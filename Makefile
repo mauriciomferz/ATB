@@ -264,6 +264,10 @@ docker-logs:
 demo: ## Run interactive demo showing risk tiers (requires OPA running)
 	@./dev/demo.sh
 
+demo-scenarios: ## Run 10 interactive demo scenarios
+	@chmod +x scripts/demo-scenarios.sh
+	@./scripts/demo-scenarios.sh
+
 test-e2e: ## Run end-to-end tests (requires OPA running)
 	@./dev/test_e2e.sh
 
