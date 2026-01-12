@@ -107,12 +107,7 @@ jobs:
           openssl rsa -in dev/poa_rsa.key -pubout -out dev/poa_rsa.pub
 
       - name: Run E2E tests
-        run: |
-          echo "=== Debug info ==="
-          ls -la dev/
-          ls -la dev/certs/
-          echo "=== Running tests ==="
-          ./dev/test_e2e.sh
+        run: ./dev/test_e2e.sh
 
   # ============================================================================
   # Go Tests
