@@ -137,6 +137,10 @@ secrets/
 *.secret
 .env.local
 .env.*.local
+
+# SPIRE Demo generated secrets
+dev/spire-demo/keys/
+dev/spire-demo/conf/server/dummy_upstream_ca.*
 # ====================
 # Linting / Code Quality Tools
 # ====================
