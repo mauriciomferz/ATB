@@ -51,19 +51,16 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
-    services:
-      opa:
-        image: openpolicyagent/opa:latest
-        ports:
-          - 8181:8181
-        options: >-
-          --health-cmd "wget -q --spider http://localhost:8181/health"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
+      - name: Start OPA server
+        run: |
+          docker run -d --name opa -p 8181:8181 openpolicyagent/opa:latest run --server --addr :8181
+          for i in {1..30}; do
+            curl -s http://localhost:8181/health && break
+            sleep 1
+          done
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -75,13 +72,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyjwt cryptography
-
-      - name: Wait for OPA
-        run: |
-          for i in {1..30}; do
-            curl -s http://localhost:8181/health && break
-            sleep 1
-          done
 
       - name: Load policy into OPA
         run: |

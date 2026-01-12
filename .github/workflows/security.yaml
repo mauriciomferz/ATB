@@ -152,5 +152,5 @@ jobs:
 
       - name: Template and scan Helm chart
         run: |
-          helm template atb charts/atb > /tmp/rendered.yaml
+          helm template atb charts/atb -f charts/atb/values-staging.yaml > /tmp/rendered.yaml
           kubesec scan /tmp/rendered.yaml || true
