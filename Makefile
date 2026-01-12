@@ -43,6 +43,11 @@ help:
 	@echo "  make docker-down    - Stop all containers"
 	@echo "  make docker-logs    - Follow container logs"
 	@echo ""
+	@echo "SPIRE Demo:"
+	@echo "  make spire-demo-up  - Start SPIRE demo environment"
+	@echo "  make spire-demo-test - Run SPIFFE identity flow demo"
+	@echo "  make spire-demo-down - Stop SPIRE demo"
+	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint           - Run linters (OPA + Go)"
 	@echo "  make fmt            - Format code (Go)"
@@ -293,6 +298,44 @@ load-soak: ## Run k6 soak test (2 hours)
 	@echo "🔥 Running soak test (2 hours)..."
 	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
 	k6 run --config tests/load/soak.json tests/load/atb_load.js
+
+# ============================================================================
+# SPIRE Demo
+# ============================================================================
+
+spire-demo-setup: ## Generate keys for SPIRE demo
+	@echo "🔐 Generating SPIRE demo keys..."
+	@chmod +x dev/spire-demo/scripts/gen-keys.sh
+	@cd dev/spire-demo && ./scripts/gen-keys.sh
+
+spire-demo-up: spire-demo-setup ## Start SPIRE demo environment
+	@echo "🚀 Starting SPIRE demo environment..."
+	@cd dev/spire-demo && docker compose up -d
+	@echo "⏳ Waiting for SPIRE to initialize..."
+	@sleep 10
+	@echo "✅ SPIRE demo running!"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  make spire-demo-test    - Run the SPIFFE identity flow demo"
+	@echo "  make spire-demo-logs    - View logs"
+	@echo "  make spire-demo-down    - Stop the demo"
+
+spire-demo-down: ## Stop SPIRE demo environment
+	@echo "🛑 Stopping SPIRE demo..."
+	@cd dev/spire-demo && docker compose down -v
+	@echo "✅ SPIRE demo stopped!"
+
+spire-demo-logs: ## View SPIRE demo logs
+	@cd dev/spire-demo && docker compose logs -f
+
+spire-demo-test: ## Run SPIFFE identity flow demo
+	@echo "🧪 Running SPIFFE identity flow demo..."
+	@cd dev/spire-demo && docker compose exec demo-agent python3 /scripts/demo_spiffe_flow.py
+
+spire-demo-entries: ## List SPIRE workload entries
+	@cd dev/spire-demo && docker compose exec spire-server \
+		/opt/spire/bin/spire-server entry show \
+		-socketPath /tmp/spire-server/private/api.sock
 
 # ============================================================================
 # Validation

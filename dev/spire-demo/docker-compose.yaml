@@ -1,0 +1,164 @@
+# SPIRE Demo Environment for ATB
+# This sets up a complete SPIFFE/SPIRE infrastructure locally
+
+services:
+  # SPIRE Server - issues identities
+  spire-server:
+    image: ghcr.io/spiffe/spire-server:1.9.0
+    hostname: spire-server
+    command: ["-config", "/opt/spire/conf/server/server.conf"]
+    volumes:
+      - ./conf/server:/opt/spire/conf/server:ro
+      - spire-server-data:/opt/spire/data
+      - spire-server-sockets:/tmp/spire-server/private
+    ports:
+      - "8081:8081"  # SPIRE Server API
+    networks:
+      - spire-net
+    healthcheck:
+      test: ["/opt/spire/bin/spire-server", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # SPIRE Agent - runs on each node, issues SVIDs to workloads
+  spire-agent:
+    image: ghcr.io/spiffe/spire-agent:1.9.0
+    hostname: spire-agent
+    command: ["-config", "/opt/spire/conf/agent/agent.conf"]
+    depends_on:
+      spire-server:
+        condition: service_healthy
+    volumes:
+      - ./conf/agent:/opt/spire/conf/agent:ro
+      - spire-agent-sockets:/tmp/spire-agent/public
+      - spire-server-sockets:/tmp/spire-server/private:ro
+    networks:
+      - spire-net
+    pid: "host"  # Required for workload attestation
+    healthcheck:
+      test: ["/opt/spire/bin/spire-agent", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Registration sidecar - registers workload entries
+  spire-registration:
+    image: ghcr.io/spiffe/spire-server:1.9.0
+    depends_on:
+      spire-server:
+        condition: service_healthy
+    volumes:
+      - spire-server-sockets:/tmp/spire-server/private:ro
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/register-workloads.sh"]
+    networks:
+      - spire-net
+
+  # OPA for policy decisions
+  opa:
+    image: openpolicyagent/opa:0.60.0
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--v0-compatible"
+      - "--log-level=info"
+      - "/policies"
+    volumes:
+      - ../../opa/policy:/policies:ro
+    ports:
+      - "8181:8181"
+    networks:
+      - spire-net
+
+  # ATB Broker with SPIFFE identity
+  broker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.broker
+    environment:
+      LISTEN_ADDR: ":8443"
+      HTTP_LISTEN_ADDR: ":8080"
+      OPA_DECISION_URL: "http://opa:8181/v1/data/atb/poa/decision"
+      SPIFFE_ENDPOINT_SOCKET: "unix:///tmp/spire-agent/public/api.sock"
+      POA_SINGLE_USE: "true"
+      POA_PUBLIC_KEY_FILE: "/keys/poa_ed25519.pub"
+      CONNECTORS_FILE: "/config/connectors.json"
+    volumes:
+      - spire-agent-sockets:/tmp/spire-agent/public:ro
+      - ./config:/config:ro
+      - ./keys:/keys:ro
+    ports:
+      - "8443:8443"
+      - "8080:8080"
+    depends_on:
+      spire-agent:
+        condition: service_healthy
+      opa:
+        condition: service_started
+    networks:
+      - spire-net
+
+  # ATB AgentAuth with SPIFFE identity
+  agentauth:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.agentauth
+    environment:
+      LISTEN_ADDR: ":8444"
+      SPIFFE_ENDPOINT_SOCKET: "unix:///tmp/spire-agent/public/api.sock"
+      ED25519_PRIVATE_KEY_FILE: "/keys/poa_ed25519.key"
+      OPA_DECISION_URL: "http://opa:8181/v1/data/atb/poa/decision"
+      CHALLENGE_TTL_SECONDS: "300"
+    volumes:
+      - spire-agent-sockets:/tmp/spire-agent/public:ro
+      - ./keys:/keys:ro
+    ports:
+      - "8444:8444"
+    depends_on:
+      spire-agent:
+        condition: service_healthy
+    networks:
+      - spire-net
+
+  # Upstream echo server (simulates enterprise API)
+  upstream:
+    image: ealen/echo-server:latest
+    environment:
+      PORT: "9000"
+    ports:
+      - "9000:9000"
+    networks:
+      - spire-net
+
+  # Demo agent workload (simulates an AI agent)
+  demo-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo-agent
+    environment:
+      SPIFFE_ENDPOINT_SOCKET: "unix:///tmp/spire-agent/public/api.sock"
+      ATB_BROKER_URL: "https://broker:8443"
+      ATB_AGENTAUTH_URL: "https://agentauth:8444"
+    volumes:
+      - spire-agent-sockets:/tmp/spire-agent/public:ro
+    depends_on:
+      broker:
+        condition: service_started
+      agentauth:
+        condition: service_started
+    networks:
+      - spire-net
+    # Keep running for interactive testing
+    stdin_open: true
+    tty: true
+
+volumes:
+  spire-server-data:
+  spire-server-sockets:
+  spire-agent-sockets:
+
+networks:
+  spire-net:
+    driver: bridge

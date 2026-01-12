@@ -1,0 +1,32 @@
+{
+  "connectors": [
+    {
+      "id": "upstream-echo",
+      "name": "Upstream Echo Server",
+      "upstream_url": "http://upstream:9000",
+      "path_prefix": "/",
+      "egress_allowlist": ["upstream:9000"]
+    },
+    {
+      "id": "crm",
+      "name": "CRM System",
+      "upstream_url": "http://upstream:9000",
+      "path_prefix": "/crm",
+      "egress_allowlist": ["upstream:9000"]
+    },
+    {
+      "id": "sap",
+      "name": "SAP System",
+      "upstream_url": "http://upstream:9000",
+      "path_prefix": "/sap",
+      "egress_allowlist": ["upstream:9000"]
+    },
+    {
+      "id": "system",
+      "name": "System Status",
+      "upstream_url": "http://upstream:9000",
+      "path_prefix": "/system",
+      "egress_allowlist": ["upstream:9000"]
+    }
+  ]
+}
