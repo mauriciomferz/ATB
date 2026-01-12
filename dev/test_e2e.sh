@@ -29,6 +29,13 @@ VENV="$REPO_ROOT/.venv"
 OPA_URL="${OPA_URL:-http://localhost:8181}"
 BROKER_URL="${BROKER_URL:-https://localhost:8443}"
 
+# Determine Python executable (use venv if available, else system python)
+if [[ -f "$VENV/bin/python" ]]; then
+    PYTHON="$VENV/bin/python"
+else
+    PYTHON="python3"
+fi
+
 # Check prerequisites
 check_prereqs() {
     echo -e "${YELLOW}Checking prerequisites...${NC}"
@@ -57,13 +64,13 @@ check_prereqs() {
     fi
     echo -e "${GREEN}✓ PoA keys exist${NC}"
     
-    # Check Python venv
-    if [[ ! -f "$VENV/bin/python" ]]; then
-        echo -e "${RED}❌ Python venv not found${NC}"
-        echo "   Create with: make setup"
+    # Check Python with required modules
+    if ! $PYTHON -c "import jwt; import cryptography" 2>/dev/null; then
+        echo -e "${RED}❌ Python dependencies not found (pyjwt, cryptography)${NC}"
+        echo "   Install with: pip install pyjwt cryptography"
         exit 1
     fi
-    echo -e "${GREEN}✓ Python venv exists${NC}"
+    echo -e "${GREEN}✓ Python dependencies available ($PYTHON)${NC}"
     
     echo ""
 }
@@ -74,7 +81,7 @@ mint_poa() {
     local constraints="${2:-{}}"
     local leg="${3:-{\"basis\": \"contract\", \"ref\": \"internal\", \"jurisdiction\": \"US\", \"accountable_party\": {\"type\": \"human\", \"id\": \"user@example.com\"}}}"
     
-    "$VENV/bin/python" "$REPO_ROOT/dev/mint_poa.py" \
+    $PYTHON "$REPO_ROOT/dev/mint_poa.py" \
         --priv "$REPO_ROOT/dev/poa_rsa.key" \
         --sub "spiffe://example.org/ns/default/sa/agent/connector" \
         --act "$action" \
