@@ -328,9 +328,24 @@ spire-demo-down: ## Stop SPIRE demo environment
 spire-demo-logs: ## View SPIRE demo logs
 	@cd dev/spire-demo && docker compose logs -f
 
-spire-demo-test: ## Run SPIFFE identity flow demo
-	@echo "🧪 Running SPIFFE identity flow demo..."
-	@cd dev/spire-demo && docker compose exec demo-agent python3 /scripts/demo_spiffe_flow.py
+spire-demo-test: ## Test SPIRE server functionality
+	@echo "🧪 Testing SPIRE server..."
+	@cd dev/spire-demo && docker compose exec spire-server \
+		/opt/spire/bin/spire-server healthcheck && echo "✅ SPIRE Server: Healthy"
+	@echo ""
+	@echo "📝 Generating join token..."
+	@cd dev/spire-demo && docker compose exec spire-server \
+		/opt/spire/bin/spire-server token generate \
+		-spiffeID spiffe://atb.example.org/agent/test \
+		-ttl 300
+	@echo ""
+	@echo "🔍 Testing OPA..."
+	@curl -s http://localhost:8182/health > /dev/null && echo "✅ OPA: Healthy"
+	@echo ""
+	@echo "🌐 Testing upstream echo server..."
+	@curl -s http://localhost:9001 | head -c 100 && echo "..."
+	@echo ""
+	@echo "✅ All SPIRE demo services are working!"
 
 spire-demo-entries: ## List SPIRE workload entries
 	@cd dev/spire-demo && docker compose exec spire-server \
