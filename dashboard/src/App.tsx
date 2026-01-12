@@ -1,34 +1,38 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import AuditLog from './pages/AuditLog';
 import Policies from './pages/Policies';
 import Agents from './pages/Agents';
+import TokenInspector from './pages/TokenInspector';
+import Settings from './pages/Settings';
+import ThemeToggle from './components/ThemeToggle';
+import ConnectionStatus from './components/ConnectionStatus';
 
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
         {/* Navigation */}
-        <nav className="bg-white shadow-sm border-b">
+        <nav className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
               <div className="flex">
                 <div className="flex-shrink-0 flex items-center">
                   <span className="text-xl font-bold text-primary-600">ATB</span>
-                  <span className="ml-2 text-gray-600">Dashboard</span>
+                  <span className="ml-2 text-gray-600 dark:text-gray-400">Dashboard</span>
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                   <NavLink to="/">Overview</NavLink>
                   <NavLink to="/audit">Audit Log</NavLink>
                   <NavLink to="/policies">Policies</NavLink>
                   <NavLink to="/agents">Agents</NavLink>
+                  <NavLink to="/token">Token Inspector</NavLink>
+                  <NavLink to="/settings">Settings</NavLink>
                 </div>
               </div>
-              <div className="flex items-center">
-                <span className="text-sm text-gray-500">
-                  <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                  Connected
-                </span>
+              <div className="flex items-center gap-4">
+                <ConnectionStatus />
+                <ThemeToggle />
               </div>
             </div>
           </div>
@@ -41,6 +45,8 @@ function App() {
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/policies" element={<Policies />} />
             <Route path="/agents" element={<Agents />} />
+            <Route path="/token" element={<TokenInspector />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
       </div>
@@ -49,10 +55,17 @@ function App() {
 }
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+
   return (
     <Link
       to={to}
-      className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700"
+      className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+        isActive
+          ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+          : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-300'
+      }`}
     >
       {children}
     </Link>

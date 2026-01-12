@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAuditEvents } from '../api';
 import { format } from 'date-fns';
 import type { AuditEvent } from '../types';
+import ExportButton from '../components/ExportButton';
 
 export default function AuditLog() {
   const [filter, setFilter] = useState<'all' | 'allow' | 'deny'>('all');
@@ -22,21 +23,21 @@ export default function AuditLog() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
-        <button className="btn btn-primary">Export CSV</button>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Audit Log</h1>
+        <ExportButton data={filteredEvents || []} filename="atb-audit-log" />
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 items-center">
+      <div className="flex gap-4 items-center flex-wrap">
         <div className="flex rounded-md shadow-sm">
           <button
-            className={`px-4 py-2 text-sm font-medium rounded-l-md border ${filter === 'all' ? 'bg-primary-50 text-primary-600 border-primary-500' : 'bg-white text-gray-700 border-gray-300'}`}
+            className={`px-4 py-2 text-sm font-medium rounded-l-md border ${filter === 'all' ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 border-primary-500' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600'}`}
             onClick={() => setFilter('all')}
           >
             All
           </button>
           <button
-            className={`px-4 py-2 text-sm font-medium border-t border-b ${filter === 'allow' ? 'bg-success-50 text-success-600 border-success-500' : 'bg-white text-gray-700 border-gray-300'}`}
+            className={`px-4 py-2 text-sm font-medium border-t border-b ${filter === 'allow' ? 'bg-success-50 dark:bg-success-900/30 text-success-600 dark:text-success-400 border-success-500' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600'}`}
             onClick={() => setFilter('allow')}
           >
             Allowed
