@@ -3,7 +3,9 @@
 # ============================================================================
 
 .PHONY: help setup test test-opa test-go lint build run-opa run-broker run-upstream \
-        certs clean docker-build docker-up docker-down fmt check
+        certs clean docker-build docker-up docker-down fmt check \
+        sdk-python-test sdk-go-test sdk-test dashboard-dev dashboard-build \
+        load-spike load-breakpoint
 
 # Default target
 help:
@@ -16,6 +18,15 @@ help:
 	@echo "Setup:"
 	@echo "  make setup          - Install all dependencies"
 	@echo "  make certs          - Generate local dev certificates"
+	@echo ""
+	@echo "SDKs:"
+	@echo "  make sdk-test       - Run all SDK tests (Python + Go)"
+	@echo "  make sdk-python-test - Run Python SDK tests"
+	@echo "  make sdk-go-test    - Run Go SDK tests"
+	@echo ""
+	@echo "Dashboard:"
+	@echo "  make dashboard-dev  - Start dashboard dev server"
+	@echo "  make dashboard-build - Build dashboard for production"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test           - Run all tests (OPA + Go)"
@@ -30,6 +41,8 @@ help:
 	@echo "  make load-test      - Run k6 load test (requires k6)"
 	@echo "  make load-stress    - Run k6 stress test"
 	@echo "  make load-soak      - Run k6 soak test (2 hours)"
+	@echo "  make load-spike     - Run k6 spike test"
+	@echo "  make load-breakpoint - Run k6 breakpoint test"
 	@echo ""
 	@echo "Development:"
 	@echo "  make run-opa        - Start OPA server (localhost:8181)"
@@ -71,6 +84,9 @@ GO_DIR := atb-gateway-go
 PY_DIR := atb-gateway-py
 OPA_DIR := opa/policy
 DEV_DIR := dev
+SDK_PY_DIR := sdk/python
+SDK_GO_DIR := sdk/go
+DASHBOARD_DIR := dashboard
 VENV := .venv
 
 # Go build settings
@@ -302,6 +318,55 @@ load-soak: ## Run k6 soak test (2 hours)
 	@echo "🔥 Running soak test (2 hours)..."
 	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
 	k6 run --config tests/load/soak.json tests/load/atb_load.js
+
+load-spike: ## Run k6 spike test
+	@echo "🔥 Running spike test..."
+	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
+	k6 run tests/load/spike_test.js
+
+load-breakpoint: ## Run k6 breakpoint test to find system limits
+	@echo "🔥 Running breakpoint test..."
+	@which k6 >/dev/null 2>&1 || (echo "⚠️  k6 not found. Install with: brew install k6" && exit 1)
+	k6 run tests/load/breakpoint_test.js
+
+# ============================================================================
+# SDK Development
+# ============================================================================
+
+sdk-test: sdk-python-test sdk-go-test ## Run all SDK tests
+	@echo "✅ All SDK tests passed!"
+
+sdk-python-test: ## Run Python SDK tests
+	@echo "🐍 Running Python SDK tests..."
+	cd $(SDK_PY_DIR) && $(CURDIR)/$(VENV)/bin/pip install -e ".[dev]" && $(CURDIR)/$(VENV)/bin/pytest tests/ -v
+
+sdk-go-test: ## Run Go SDK tests
+	@echo "🔍 Running Go SDK tests..."
+	cd $(SDK_GO_DIR) && go mod tidy && go test -v -race ./...
+
+sdk-python-build: ## Build Python SDK package
+	@echo "📦 Building Python SDK..."
+	cd $(SDK_PY_DIR) && pip install build && python -m build
+
+# ============================================================================
+# Dashboard
+# ============================================================================
+
+dashboard-install: ## Install dashboard dependencies
+	@echo "📦 Installing dashboard dependencies..."
+	cd $(DASHBOARD_DIR) && npm install
+
+dashboard-dev: dashboard-install ## Start dashboard development server
+	@echo "🚀 Starting dashboard on http://localhost:3000..."
+	cd $(DASHBOARD_DIR) && npm run dev
+
+dashboard-build: dashboard-install ## Build dashboard for production
+	@echo "🏗️  Building dashboard..."
+	cd $(DASHBOARD_DIR) && npm run build
+	@echo "✅ Dashboard built in $(DASHBOARD_DIR)/dist/"
+
+dashboard-preview: dashboard-build ## Preview production build
+	cd $(DASHBOARD_DIR) && npm run preview
 
 # ============================================================================
 # SPIRE Demo
