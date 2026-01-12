@@ -1,125 +1,123 @@
-package batch
 // Package main demonstrates batch action execution with the ATB Go SDK.
 package main
 
 import (
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	fmt.Printf("\nSummary: %d succeeded, %d failed\n", successful, failed)	}		}			failed++			fmt.Printf("✗ %s (%s): %s\n", r.Operation.Action, r.Operation.VendorID, r.Result.Error)		} else {			successful++			fmt.Printf("✓ %s (%s): Success\n", r.Operation.Action, r.Operation.VendorID)		} else if r.Result.Success {			failed++			fmt.Printf("✗ %s (%s): %v\n", r.Operation.Action, r.Operation.VendorID, r.Error)		if r.Error != nil {	for _, r := range results {	failed := 0	successful := 0	fmt.Println("\n=== Batch Execution Results ===\n")	// Print results	results := ExecuteBatch(ctx, client, privateKey, operations, "batch-user@example.com")	defer cancel()	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)	// Execute batch	}		{Action: "sap.payment.list", VendorID: "V-001"},		{Action: "sap.vendor.read", VendorID: "V-003"},		{Action: "sap.vendor.read", VendorID: "V-002"},		{Action: "sap.vendor.read", VendorID: "V-001"},	operations := []VendorOperation{	// Define batch operations	}		privateKey = nil		fmt.Println("Warning: Could not load private key, using demo mode")	if err != nil {	privateKey, err := atb.LoadPrivateKey("./private.pem")	// Load private key (in production, use secure key management)	defer client.Close()	}		panic(err)	if err != nil {	client, err := atb.NewClient(atb.DefaultConfig())	// Create clientfunc main() {}	return results	wg.Wait()	}		}(i, op)			}				Error:     err,				Result:    result,				Operation: operation,			results[idx] = BatchResult{			result, err := client.Execute(ctx, poa, privateKey)			// Execute				Build()				}).					},						DisplayName: "Batch User",						ID:          userEmail,						Type:        "user",					AccountableParty: atb.AccountableParty{					Jurisdiction: "DE",				Legal(atb.LegalGrounding{				}).					"vendor_id": operation.VendorID,				WithParams(map[string]any{				Action(operation.Action).				ForAgent("spiffe://atb.example/agent/batch-processor").			poa := atb.NewPoABuilder().			// Build PoA for this operation			defer wg.Done()		go func(idx int, operation VendorOperation) {		wg.Add(1)	for i, op := range operations {	var wg sync.WaitGroup	results := make([]BatchResult, len(operations))) []BatchResult {	userEmail string,	operations []VendorOperation,	privateKey *ecdsa.PrivateKey,	client *atb.Client,	ctx context.Context,func ExecuteBatch(// ExecuteBatch executes multiple actions concurrently.}	Error     error	Result    *atb.ActionResult	Operation VendorOperationtype BatchResult struct {// BatchResult holds the result of a batch operation.}	Params   map[string]any	VendorID string	Action   stringtype VendorOperation struct {// VendorOperation represents a vendor operation to execute.)	atb "github.com/mauriciomferz/ATB/sdk/go"	"time"	"sync"	"fmt"	"crypto/ecdsa"	"context"
+	"context"
+	"crypto/ecdsa"
+	"fmt"
+	"sync"
+	"time"
+
+	atb "github.com/mauriciomferz/ATB/sdk/go"
+)
+
+// VendorOperation represents a vendor operation to execute.
+type VendorOperation struct {
+	Action   string
+	VendorID string
+	Params   map[string]any
+}
+
+// BatchResult holds the result of a batch operation.
+type BatchResult struct {
+	Operation VendorOperation
+	Result    *atb.ActionResult
+	Error     error
+}
+
+// ExecuteBatch executes multiple actions concurrently.
+func ExecuteBatch(
+	ctx context.Context,
+	client *atb.Client,
+	privateKey *ecdsa.PrivateKey,
+	operations []VendorOperation,
+	userEmail string,
+) []BatchResult {
+	results := make([]BatchResult, len(operations))
+	var wg sync.WaitGroup
+
+	for i, op := range operations {
+		wg.Add(1)
+		go func(idx int, operation VendorOperation) {
+			defer wg.Done()
+
+			// Build PoA for this operation
+			poa := atb.NewPoABuilder().
+				ForAgent("spiffe://atb.example/agent/batch-processor").
+				Action(operation.Action).
+				WithParams(map[string]any{
+					"vendor_id": operation.VendorID,
+				}).
+				Legal(atb.LegalGrounding{
+					Jurisdiction: "DE",
+					AccountableParty: atb.AccountableParty{
+						Type:        "user",
+						ID:          userEmail,
+						DisplayName: "Batch User",
+					},
+				}).
+				Build()
+
+			// Execute
+			result, err := client.Execute(ctx, poa, privateKey)
+			results[idx] = BatchResult{
+				Operation: operation,
+				Result:    result,
+				Error:     err,
+			}
+		}(i, op)
+	}
+
+	wg.Wait()
+	return results
+}
+
+func main() {
+	// Create client
+	client, err := atb.NewClient(atb.DefaultConfig())
+	if err != nil {
+		panic(err)
+	}
+	defer client.Close()
+
+	// Load private key (in production, use secure key management)
+	privateKey, err := atb.LoadPrivateKey("./private.pem")
+	if err != nil {
+		fmt.Println("Warning: Could not load private key, using demo mode")
+		privateKey = nil
+	}
+
+	// Define batch operations
+	operations := []VendorOperation{
+		{Action: "sap.vendor.read", VendorID: "V-001"},
+		{Action: "sap.vendor.read", VendorID: "V-002"},
+		{Action: "sap.vendor.read", VendorID: "V-003"},
+		{Action: "sap.payment.list", VendorID: "V-001"},
+	}
+
+	// Execute batch
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	results := ExecuteBatch(ctx, client, privateKey, operations, "batch-user@example.com")
+
+	// Print results
+	fmt.Println("\n=== Batch Execution Results ===\n")
+	successful := 0
+	failed := 0
+
+	for _, r := range results {
+		if r.Error != nil {
+			fmt.Printf("✗ %s (%s): %v\n", r.Operation.Action, r.Operation.VendorID, r.Error)
+			failed++
+		} else if r.Result.Success {
+			fmt.Printf("✓ %s (%s): Success\n", r.Operation.Action, r.Operation.VendorID)
+			successful++
+		} else {
+			fmt.Printf("✗ %s (%s): %s\n", r.Operation.Action, r.Operation.VendorID, r.Result.Error)
+			failed++
+		}
+	}
+
+	fmt.Printf("\nSummary: %d succeeded, %d failed\n", successful, failed)
+}

@@ -1,0 +1,613 @@
+openapi: 3.0.3
+info:
+  title: ATB Gateway API
+  description: |
+    Autonomy Trust Broker (ATB) Gateway API for enterprise AI agent autonomy management.
+    
+    The ATB Gateway provides secure, auditable execution of AI agent actions within 
+    enterprise systems. It implements policy-based access control using OPA (Open Policy Agent)
+    and SPIFFE-based identity verification.
+    
+    ## Key Concepts
+    
+    - **Power of Attorney (PoA)**: A signed token granting an AI agent authority to perform 
+      specific actions on behalf of a user or system.
+    - **Action**: An operation the agent wants to perform (e.g., `sap.vendor.read`)
+    - **Risk Tier**: Classification of action risk (LOW, MEDIUM, HIGH)
+    - **Legal Grounding**: Jurisdiction and accountability information for compliance
+    
+    ## Authentication
+    
+    All requests must include a valid PoA token in the Authorization header:
+    ```
+    Authorization: Bearer <poa_token>
+    ```
+    
+    The PoA token is a signed JWT containing:
+    - Agent SPIFFE ID
+    - Requested action
+    - Legal grounding information
+    - Expiration time
+    
+  version: 1.0.0
+  contact:
+    name: ATB Team
+    email: atb@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://atb.example.com/api/v1
+    description: Production server
+  - url: https://atb-staging.example.com/api/v1
+    description: Staging server
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: Actions
+    description: Execute and manage agent actions
+  - name: Policy
+    description: Policy evaluation and checking
+  - name: Audit
+    description: Audit log access and management
+  - name: Health
+    description: Service health and readiness
+
+paths:
+  /execute:
+    post:
+      tags:
+        - Actions
+      summary: Execute an action
+      description: |
+        Executes an action on behalf of an AI agent. The action must be authorized
+        by the accompanying PoA token and pass OPA policy evaluation.
+        
+        The request is:
+        1. Authenticated via the PoA token
+        2. Evaluated against OPA policies
+        3. Routed to the appropriate connector
+        4. Logged to the audit trail
+      operationId: executeAction
+      security:
+        - PoAToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRequest'
+            examples:
+              vendorRead:
+                summary: Read vendor details
+                value:
+                  action: sap.vendor.read
+                  params:
+                    vendor_id: V-001
+              paymentCreate:
+                summary: Create payment
+                value:
+                  action: sap.payment.create
+                  params:
+                    vendor_id: V-001
+                    amount: 1500.00
+                    currency: EUR
+      responses:
+        '200':
+          description: Action executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteResponse'
+              examples:
+                success:
+                  summary: Successful execution
+                  value:
+                    success: true
+                    result:
+                      vendor_id: V-001
+                      name: Acme Corp
+                      status: active
+                    audit_id: aud_abc123
+                    risk_tier: LOW
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid or expired PoA token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Action denied by policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyDenialResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /policy/check:
+    post:
+      tags:
+        - Policy
+      summary: Check if an action is allowed
+      description: |
+        Pre-checks whether an action would be allowed without executing it.
+        Useful for building UIs that show which actions are available.
+      operationId: checkPolicy
+      security:
+        - PoAToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCheckRequest'
+      responses:
+        '200':
+          description: Policy check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyCheckResponse'
+        '401':
+          description: Invalid or expired PoA token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /policy/batch-check:
+    post:
+      tags:
+        - Policy
+      summary: Check multiple actions
+      description: |
+        Batch policy check for multiple actions. Returns the policy decision
+        for each action in a single request.
+      operationId: batchCheckPolicy
+      security:
+        - PoAToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - actions
+              properties:
+                actions:
+                  type: array
+                  items:
+                    type: string
+                  description: List of action identifiers to check
+                  example:
+                    - sap.vendor.read
+                    - sap.vendor.create
+                    - sap.payment.approve
+      responses:
+        '200':
+          description: Batch policy check results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/PolicyCheckResponse'
+
+  /audit:
+    get:
+      tags:
+        - Audit
+      summary: Get audit logs
+      description: |
+        Retrieves audit logs for actions executed through the gateway.
+        Supports filtering by time range, action, agent, and decision.
+      operationId: getAuditLogs
+      security:
+        - PoAToken: []
+      parameters:
+        - name: from
+          in: query
+          description: Start time (ISO 8601 format)
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-01T00:00:00Z"
+        - name: to
+          in: query
+          description: End time (ISO 8601 format)
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-31T23:59:59Z"
+        - name: action
+          in: query
+          description: Filter by action identifier
+          schema:
+            type: string
+          example: sap.vendor.read
+        - name: agent
+          in: query
+          description: Filter by agent SPIFFE ID
+          schema:
+            type: string
+          example: spiffe://example.com/agent/procurement
+        - name: decision
+          in: query
+          description: Filter by policy decision
+          schema:
+            type: string
+            enum:
+              - allow
+              - deny
+        - name: risk_tier
+          in: query
+          description: Filter by risk tier
+          schema:
+            type: string
+            enum:
+              - LOW
+              - MEDIUM
+              - HIGH
+        - name: limit
+          in: query
+          description: Maximum number of results
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: offset
+          in: query
+          description: Offset for pagination
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Audit logs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /audit/{auditId}:
+    get:
+      tags:
+        - Audit
+      summary: Get a specific audit log entry
+      description: Retrieves a single audit log entry by its ID.
+      operationId: getAuditEntry
+      security:
+        - PoAToken: []
+      parameters:
+        - name: auditId
+          in: path
+          required: true
+          description: The audit entry ID
+          schema:
+            type: string
+          example: aud_abc123
+      responses:
+        '200':
+          description: Audit entry retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEntry'
+        '404':
+          description: Audit entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the gateway.
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness check
+      description: Returns whether the gateway is ready to accept requests.
+      operationId: readinessCheck
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: true
+        '503':
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: false
+                  reason:
+                    type: string
+                    example: OPA not available
+
+components:
+  securitySchemes:
+    PoAToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Power of Attorney (PoA) token. This is a signed JWT containing:
+        - `sub`: Agent SPIFFE ID
+        - `action`: The action being authorized
+        - `legal`: Legal grounding information
+        - `exp`: Expiration timestamp
+
+  schemas:
+    ExecuteRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          description: The action identifier to execute
+          example: sap.vendor.read
+        params:
+          type: object
+          description: Action-specific parameters
+          additionalProperties: true
+          example:
+            vendor_id: V-001
+
+    ExecuteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Whether the action succeeded
+        result:
+          type: object
+          description: Action-specific result data
+          additionalProperties: true
+        audit_id:
+          type: string
+          description: The audit log entry ID for this execution
+          example: aud_abc123
+        risk_tier:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+          description: The risk tier of the executed action
+        error:
+          type: string
+          description: Error message if the action failed
+
+    PolicyCheckRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          description: The action to check
+          example: sap.vendor.create
+        params:
+          type: object
+          description: Optional parameters that may affect policy
+          additionalProperties: true
+
+    PolicyCheckResponse:
+      type: object
+      properties:
+        allow:
+          type: boolean
+          description: Whether the action is allowed
+        risk_tier:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+          description: The risk tier of the action
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Reasons for the decision
+        constraints:
+          type: object
+          description: Any constraints on the action
+          additionalProperties: true
+
+    PolicyDenialResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Policy denied
+        code:
+          type: string
+          example: POLICY_DENIED
+        reasons:
+          type: array
+          items:
+            type: string
+          example:
+            - Action requires higher risk tier approval
+            - Missing required legal grounding
+        audit_id:
+          type: string
+          description: Audit ID for the denied request
+          example: aud_xyz789
+
+    AuditLogResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntry'
+        total:
+          type: integer
+          description: Total number of matching entries
+        limit:
+          type: integer
+          description: Current limit
+        offset:
+          type: integer
+          description: Current offset
+
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique audit entry ID
+          example: aud_abc123
+        timestamp:
+          type: string
+          format: date-time
+          description: When the action was executed
+        action:
+          type: string
+          description: The action that was executed
+          example: sap.vendor.read
+        agent:
+          type: string
+          description: The agent's SPIFFE ID
+          example: spiffe://example.com/agent/procurement
+        decision:
+          type: string
+          enum:
+            - allow
+            - deny
+          description: Policy decision
+        risk_tier:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+          description: Risk tier of the action
+        duration_ms:
+          type: integer
+          description: Execution duration in milliseconds
+        legal:
+          type: object
+          properties:
+            jurisdiction:
+              type: string
+              example: DE
+            accountable_party:
+              type: object
+              properties:
+                type:
+                  type: string
+                  example: user
+                id:
+                  type: string
+                  example: user@example.com
+        request:
+          type: object
+          description: Sanitized request parameters
+        response:
+          type: object
+          description: Sanitized response data
+        error:
+          type: string
+          description: Error message if action failed
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          example: healthy
+        version:
+          type: string
+          example: 1.0.0
+        components:
+          type: object
+          properties:
+            opa:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: healthy
+            connectors:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: healthy
+                count:
+                  type: integer
+                  example: 3

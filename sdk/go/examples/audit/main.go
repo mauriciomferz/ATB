@@ -1,4 +1,3 @@
-package audit
 // Package main demonstrates audit log analysis with the ATB Go SDK.
 package main
 

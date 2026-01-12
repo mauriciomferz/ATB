@@ -1,4 +1,3 @@
-package policycheck
 // Package main demonstrates policy pre-check with the ATB Go SDK.
 package main
 
@@ -46,27 +45,25 @@ func main() {
 		"sap.vendor.read",
 		"sap.vendor.create",
 		"sap.vendor.update",
+		"sap.vendor.delete",
+		"sap.payment.approve",
+		"sap.payment.execute",
+	}
 
+	// Check permissions for different users
+	users := []string{"alice", "bob", "readonly-service"}
 
+	for _, user := range users {
+		fmt.Printf("\nPermissions for %s:\n", user)
+		fmt.Println("----------------------------------------")
+		permissions := CheckPermissions(ctx, client, user, actionsToCheck)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	}		}			fmt.Printf("  %s %s\n", status, action)			}				status = "✓"			if permissions[action] {			status := "✗"		for _, action := range actionsToCheck {		permissions := CheckPermissions(ctx, client, user, actionsToCheck)		fmt.Println("----------------------------------------")		fmt.Printf("\nPermissions for %s:\n", user)	for _, user := range users {	users := []string{"alice", "bob", "readonly-service"}	// Check permissions for different users	}		"sap.payment.execute",		"sap.payment.approve",		"sap.vendor.delete",
+		for _, action := range actionsToCheck {
+			status := "✗"
+			if permissions[action] {
+				status = "✓"
+			}
+			fmt.Printf("  %s %s\n", status, action)
+		}
+	}
+}
