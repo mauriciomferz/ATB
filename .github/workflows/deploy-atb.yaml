@@ -32,7 +32,7 @@ jobs:
   security-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -75,7 +75,7 @@ jobs:
   opa-policy-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup OPA
         uses: open-policy-agent/setup-opa@v2
@@ -99,7 +99,7 @@ jobs:
   build-and-push-images:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Compute GHCR owner (lowercase)
         shell: bash
@@ -147,7 +147,7 @@ jobs:
   lint-and-package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -179,7 +179,7 @@ jobs:
     # Skip if no cluster is configured (set DEPLOY_ENABLED=true in repository variables)
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Compute GHCR owner (lowercase)
         shell: bash
@@ -243,7 +243,7 @@ jobs:
     # Only deploy to prod on manual trigger with deployProd=true AND cluster configured
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.deployProd == 'true' && vars.DEPLOY_ENABLED == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Compute GHCR owner (lowercase)
         shell: bash
