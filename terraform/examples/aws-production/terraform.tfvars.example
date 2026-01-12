@@ -1,0 +1,49 @@
+# AWS Production Example Configuration
+# Copy this file to terraform.tfvars and fill in your values
+
+region       = "eu-west-1"
+cluster_name = "atb-prod-eks"
+trust_domain = "atb.example.com"
+
+# Kubernetes version
+cluster_version = "1.28"
+
+# Networking - replace with your VPC and subnet IDs
+vpc_id = "vpc-xxxxxxxxxxxxxxxxx"
+subnet_ids = [
+  "subnet-xxxxxxxxxxxxxxxxx",
+  "subnet-yyyyyyyyyyyyyyyyy",
+  "subnet-zzzzzzzzzzzzzzzzz"
+]
+
+# Encryption (optional but recommended)
+# kms_key_arn = "arn:aws:kms:eu-west-1:123456789012:key/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Container images
+broker_image    = "ghcr.io/mauriciomferz/atb-broker:v1.0.0"
+agentauth_image = "ghcr.io/mauriciomferz/atb-agentauth:v1.0.0"
+
+# Connectors
+connectors = {
+  sap = {
+    type     = "sap"
+    endpoint = "https://sap.example.com/api"
+    auth     = "spiffe"
+    config = {
+      client_id = "atb-client"
+    }
+  }
+  # servicenow = {
+  #   type     = "servicenow"
+  #   endpoint = "https://instance.service-now.com/api"
+  #   auth     = "oauth2"
+  # }
+}
+
+# Tags
+tags = {
+  Project     = "ATB"
+  Environment = "production"
+  ManagedBy   = "terraform"
+  CostCenter  = "IT"
+}
