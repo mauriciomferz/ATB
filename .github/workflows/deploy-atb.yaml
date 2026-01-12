@@ -195,14 +195,16 @@ jobs:
       # Choose ONE of the following patterns and delete the others.
       # --- Pattern A: KUBECONFIG stored in GitHub Secret (least preferred) ---
       - name: Configure kubeconfig (from secret)
-        if: ${{ secrets.KUBECONFIG_STAGING != '' }}
+        env:
+          KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
+        if: ${{ env.KUBECONFIG_STAGING != '' }}
         run: |
           mkdir -p "$HOME/.kube"
-          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > "$HOME/.kube/config"
+          echo "$KUBECONFIG_STAGING" | base64 -d > "$HOME/.kube/config"
 
       # --- Pattern B (recommended): cloud OIDC login + set-context (example: AKS) ---
       - name: Azure login (OIDC)
-        if: ${{ secrets.AZURE_CLIENT_ID != '' }}
+        if: ${{ vars.USE_AZURE_OIDC == 'true' }}
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -210,7 +212,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: AKS set context
-        if: ${{ secrets.AKS_STAGING_CLUSTER_NAME != '' }}
+        if: ${{ vars.USE_AZURE_OIDC == 'true' }}
         uses: azure/aks-set-context@v4
         with:
           resource-group: ${{ secrets.AKS_STAGING_RESOURCE_GROUP }}
@@ -253,13 +255,15 @@ jobs:
         uses: azure/setup-kubectl@v4
 
       - name: Configure kubeconfig (from secret)
-        if: ${{ secrets.KUBECONFIG_PROD != '' }}
+        env:
+          KUBECONFIG_PROD: ${{ secrets.KUBECONFIG_PROD }}
+        if: ${{ env.KUBECONFIG_PROD != '' }}
         run: |
           mkdir -p "$HOME/.kube"
-          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > "$HOME/.kube/config"
+          echo "$KUBECONFIG_PROD" | base64 -d > "$HOME/.kube/config"
 
       - name: Azure login (OIDC)
-        if: ${{ secrets.AZURE_CLIENT_ID != '' }}
+        if: ${{ vars.USE_AZURE_OIDC == 'true' }}
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -267,7 +271,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: AKS set context
-        if: ${{ secrets.AKS_PROD_CLUSTER_NAME != '' }}
+        if: ${{ vars.USE_AZURE_OIDC == 'true' }}
         uses: azure/aks-set-context@v4
         with:
           resource-group: ${{ secrets.AKS_PROD_RESOURCE_GROUP }}
