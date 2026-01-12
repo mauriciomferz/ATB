@@ -14,6 +14,18 @@ broker:
     tag: "0.1.0"
     pullPolicy: IfNotPresent
   replicas: 1
+  # Autoscaling configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    # maxUnavailable: 1
   tls:
     # "secret" = mount a Kubernetes TLS secret and run file-based TLS
     # "spiffe" = run secret-less mTLS using SPIFFE Workload API (requires mounting the Workload API socket)
@@ -117,6 +129,11 @@ opa:
   # Enable v0-compatible mode for legacy Rego policies (OPA 1.0+)
   v0Compatible: true
   replicas: 1
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    # maxUnavailable: 1
   service:
     type: ClusterIP
     port: 8181
@@ -134,6 +151,18 @@ agentauth:
     tag: "0.1.0"
     pullPolicy: IfNotPresent
   replicas: 1
+  # Autoscaling configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    # maxUnavailable: 1
   service:
     type: ClusterIP
     port: 9090
@@ -186,3 +215,48 @@ csi:
   driver: "csi.spiffe.io"
   mountPath: "/spire-agent-socket"
   socketFile: "workload-api.sock"
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+    # kubernetes.io/tls-acme: "true"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: atb.example.com
+  tls: []
+    # - secretName: atb-tls
+    #   hosts:
+    #     - atb.example.com
+
+# Network Policy configuration
+networkPolicy:
+  enabled: false
+  broker:
+    allowExternalEgress: true
+
+# Dashboard configuration
+dashboard:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: ghcr.io/mauriciomferz/atb-dashboard
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  config:
+    apiUrl: "http://atb-broker:8080"
+    wsUrl: "ws://atb-broker:8080/ws"
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []

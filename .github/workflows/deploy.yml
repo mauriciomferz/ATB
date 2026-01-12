@@ -1,0 +1,94 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version to deploy (e.g., v1.0.0)'
+        required: true
+
+env:
+  HELM_RELEASE_NAME: atb
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+
+      - name: Determine values file
+        id: values
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "production" ]; then
+            echo "file=values-prod.yaml" >> $GITHUB_OUTPUT
+          else
+            echo "file=values-staging.yaml" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy with Helm
+        working-directory: charts/atb
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          VERSION=${VERSION#v}  # Remove 'v' prefix if present
+          
+          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} . \
+            -f values.yaml \
+            -f ${{ steps.values.outputs.file }} \
+            --set broker.image.tag=$VERSION \
+            --set agentauth.image.tag=$VERSION \
+            --set opa.image.tag=0.60.0 \
+            --namespace atb \
+            --create-namespace \
+            --wait \
+            --timeout 10m
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/atb-broker -n atb --timeout=5m
+          kubectl rollout status deployment/atb-agentauth -n atb --timeout=5m
+          kubectl rollout status deployment/atb-opa -n atb --timeout=5m
+
+      - name: Run smoke tests
+        run: |
+          # Get broker service URL
+          BROKER_URL=$(kubectl get svc atb-broker -n atb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          if [ -z "$BROKER_URL" ]; then
+            BROKER_URL=$(kubectl get svc atb-broker -n atb -o jsonpath='{.spec.clusterIP}')
+          fi
+          
+          # Health check
+          kubectl run smoke-test --rm -i --restart=Never --image=curlimages/curl -- \
+            curl -sf http://$BROKER_URL:8080/health || echo "Smoke test warning"
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "✅ Deployment to ${{ github.event.inputs.environment }} completed successfully"
+          echo "Version: ${{ github.event.inputs.version }}"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment to ${{ github.event.inputs.environment }} failed"
+          echo "Version: ${{ github.event.inputs.version }}"

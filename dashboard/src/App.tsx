@@ -5,8 +5,10 @@ import Policies from './pages/Policies';
 import Agents from './pages/Agents';
 import TokenInspector from './pages/TokenInspector';
 import Settings from './pages/Settings';
+import Users from './pages/Users';
 import ThemeToggle from './components/ThemeToggle';
 import ConnectionStatus from './components/ConnectionStatus';
+import ToastContainer from './components/ToastContainer';
 
 function App() {
   return (
@@ -26,6 +28,7 @@ function App() {
                   <NavLink to="/audit">Audit Log</NavLink>
                   <NavLink to="/policies">Policies</NavLink>
                   <NavLink to="/agents">Agents</NavLink>
+                  <NavLink to="/users">Users</NavLink>
                   <NavLink to="/token">Token Inspector</NavLink>
                   <NavLink to="/settings">Settings</NavLink>
                 </div>
@@ -45,10 +48,12 @@ function App() {
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/policies" element={<Policies />} />
             <Route path="/agents" element={<Agents />} />
+            <Route path="/users" element={<Users />} />
             <Route path="/token" element={<TokenInspector />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
+        <ToastContainer />
       </div>
     </BrowserRouter>
   );

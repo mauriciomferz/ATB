@@ -1,0 +1,103 @@
+{{- if .Values.broker.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "atb.fullname" . }}-broker
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "atb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "atb.fullname" . }}-broker
+  minReplicas: {{ .Values.broker.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.broker.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.broker.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.broker.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.broker.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.broker.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+{{- end }}
+---
+{{- if .Values.agentauth.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "atb.fullname" . }}-agentauth
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "atb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agentauth
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "atb.fullname" . }}-agentauth
+  minReplicas: {{ .Values.agentauth.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.agentauth.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.agentauth.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.agentauth.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.agentauth.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.agentauth.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+{{- end }}

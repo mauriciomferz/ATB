@@ -1,0 +1,166 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "atb.fullname" . }}-broker
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "atb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "atb.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: broker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: {{ .Values.broker.service.port }}
+    # Allow traffic from agentauth
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "atb.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: agentauth
+      ports:
+        - protocol: TCP
+          port: {{ .Values.broker.service.port }}
+    # Allow traffic from same namespace
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.broker.service.port }}
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow OPA
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "atb.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: opa
+      ports:
+        - protocol: TCP
+          port: {{ .Values.opa.service.port }}
+    # Allow SPIRE
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: spire
+      ports:
+        - protocol: TCP
+          port: 8081
+    # Allow external connectors (configurable)
+    {{- if .Values.networkPolicy.broker.allowExternalEgress }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "atb.fullname" . }}-agentauth
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "atb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agentauth
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "atb.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: agentauth
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: {{ .Values.agentauth.service.port }}
+    # Allow traffic from same namespace
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.agentauth.service.port }}
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow broker
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "atb.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: broker
+      ports:
+        - protocol: TCP
+          port: {{ .Values.broker.service.port }}
+    # Allow SPIRE
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: spire
+      ports:
+        - protocol: TCP
+          port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "atb.fullname" . }}-opa
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "atb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "atb.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: opa
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from broker
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "atb.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: broker
+      ports:
+        - protocol: TCP
+          port: {{ .Values.opa.service.port }}
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+{{- end }}

@@ -1,0 +1,68 @@
+{{- if .Values.broker.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "atb.fullname" . }}-broker
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "atb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+spec:
+  {{- if .Values.broker.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.broker.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.broker.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.broker.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "atb.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: broker
+{{- end }}
+---
+{{- if .Values.agentauth.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "atb.fullname" . }}-agentauth
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "atb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agentauth
+spec:
+  {{- if .Values.agentauth.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.agentauth.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.agentauth.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.agentauth.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "atb.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: agentauth
+{{- end }}
+---
+{{- if .Values.opa.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "atb.fullname" . }}-opa
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "atb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+spec:
+  {{- if .Values.opa.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.opa.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.opa.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.opa.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "atb.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: opa
+{{- end }}
