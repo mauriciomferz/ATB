@@ -56,7 +56,7 @@ jobs:
             ./cmd/agentauth
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
@@ -213,7 +213,7 @@ jobs:
         run: helm package charts/atb -d .helm-packages
 
       - name: Upload Helm chart artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: helm-chart
           path: .helm-packages/*.tgz
