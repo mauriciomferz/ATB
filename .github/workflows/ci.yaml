@@ -46,6 +46,71 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
   # ============================================================================
+  # E2E Tests (OPA Policy Integration)
+  # ============================================================================
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    services:
+      opa:
+        image: openpolicyagent/opa:latest
+        ports:
+          - 8181:8181
+        options: >-
+          --health-cmd "wget -q --spider http://localhost:8181/health"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: atb-gateway-py/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyjwt cryptography
+
+      - name: Wait for OPA
+        run: |
+          for i in {1..30}; do
+            curl -s http://localhost:8181/health && break
+            sleep 1
+          done
+
+      - name: Load policy into OPA
+        run: |
+          curl -X PUT http://localhost:8181/v1/policies/atb \
+            -H "Content-Type: text/plain" \
+            --data-binary @opa/policy/poa.rego
+
+      - name: Generate test certs and keys
+        run: |
+          mkdir -p dev/certs
+          # Generate CA
+          openssl genrsa -out dev/certs/ca.key 2048
+          openssl req -new -x509 -days 365 -key dev/certs/ca.key \
+            -out dev/certs/ca.crt -subj "/CN=ATB Test CA"
+          # Generate client cert
+          openssl genrsa -out dev/certs/client.key 2048
+          openssl req -new -key dev/certs/client.key \
+            -out dev/certs/client.csr -subj "/CN=test-agent"
+          openssl x509 -req -days 365 -in dev/certs/client.csr \
+            -CA dev/certs/ca.crt -CAkey dev/certs/ca.key \
+            -CAcreateserial -out dev/certs/client.crt
+          # Generate PoA signing key (RSA)
+          openssl genrsa -out dev/poa_rsa.key 2048
+          openssl rsa -in dev/poa_rsa.key -pubout -out dev/poa_rsa.pub
+
+      - name: Run E2E tests
+        run: ./dev/test_e2e.sh
+
+  # ============================================================================
   # Go Tests
   # ============================================================================
   go-tests:

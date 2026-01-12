@@ -103,3 +103,68 @@ If you are **not** using AgentAuth JWKS (or want to override it), you can provid
   - `kubectl -n <namespace> port-forward svc/<release>-broker 8080:8080`
   - `curl -sSf http://127.0.0.1:8080/ready`
 
+---
+
+## Quick Local Testing with kind (No SPIRE)
+
+For quick local testing without SPIRE, you can use a kind cluster with TLS secrets:
+
+### 1) Create kind cluster
+
+```bash
+kind create cluster --name atb-local
+```
+
+### 2) Build and load images
+
+```bash
+cd atb-gateway-go
+docker build -f Dockerfile.broker -t atb-broker:local .
+docker build -f Dockerfile.agentauth -t atb-agentauth:local .
+kind load docker-image atb-broker:local atb-agentauth:local --name atb-local
+```
+
+### 3) Create namespace and secrets
+
+```bash
+kubectl create namespace atb-staging
+
+# Create signing key for AgentAuth
+./scripts/create-signing-key-secret.sh atb-staging
+
+# Create TLS secret for broker (self-signed for testing)
+openssl req -x509 -newkey rsa:2048 -keyout /tmp/tls.key -out /tmp/tls.crt \
+  -days 365 -nodes -subj "/CN=atb-broker"
+kubectl create secret tls atb-broker-tls --cert=/tmp/tls.crt --key=/tmp/tls.key -n atb-staging
+```
+
+### 4) Deploy with Helm (non-SPIFFE mode)
+
+```bash
+helm upgrade --install atb-staging ./charts/atb -n atb-staging \
+  -f charts/atb/values-staging.yaml \
+  --set csi.enabled=false \
+  --set broker.tls.mode=secret \
+  --set broker.tls.secretName=atb-broker-tls \
+  --set agentauth.image.repository=atb-agentauth \
+  --set agentauth.image.tag=local \
+  --set broker.image.repository=atb-broker \
+  --set broker.image.tag=local
+```
+
+### 5) Verify deployment
+
+```bash
+kubectl get pods -n atb-staging
+kubectl logs -n atb-staging -l app.kubernetes.io/component=broker
+```
+
+### 6) Test endpoints
+
+```bash
+# Port-forward broker
+kubectl port-forward -n atb-staging svc/atb-staging-broker 8080:8080 &
+
+# Test health
+curl http://localhost:8080/health
+```

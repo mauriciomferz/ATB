@@ -284,3 +284,78 @@ If you're still stuck:
    - Expected vs actual behavior
    - Environment details (OS, Go version, etc.)
    - Relevant logs
+## Kubernetes Issues
+
+### Pod Stuck in ImagePullBackOff
+
+**Problem**: Images not available in cluster
+
+```bash
+# For kind clusters, load local images
+docker build -f Dockerfile.broker -t atb-broker:local ./atb-gateway-go
+kind load docker-image atb-broker:local --name <cluster-name>
+
+# Then update Helm values
+helm upgrade ... --set broker.image.repository=atb-broker --set broker.image.tag=local
+```
+
+### OPA ConfigMap Empty
+
+**Problem**: `rego_parse_error: empty module`
+
+This happens when Helm's `.Files.Get` can't find the policy file (path must be inside chart directory).
+
+```bash
+# Check if policy was rendered
+kubectl get configmap -n <namespace> <release>-opa-policy -o yaml
+
+# The policy file must be in charts/atb/files/poa.rego
+# NOT in opa/policy/poa.rego (outside chart directory)
+```
+
+### SPIFFE CSI Driver Not Found
+
+**Problem**: `driver name csi.spiffe.io not found in the list of registered CSI drivers`
+
+If you don't have SPIRE CSI driver installed:
+
+```bash
+# Switch to TLS secret mode
+helm upgrade ... \
+  --set csi.enabled=false \
+  --set broker.tls.mode=secret \
+  --set broker.tls.secretName=atb-broker-tls
+
+# Create TLS secret first
+kubectl create secret tls atb-broker-tls \
+  --cert=tls.crt --key=tls.key -n <namespace>
+```
+
+### OPA Unknown Flag Error
+
+**Problem**: `unknown flag: --v0-compatible`
+
+OPA version is too old (pre-1.0). The `--v0-compatible` flag was added in OPA 1.0.
+
+```bash
+# Update OPA image to latest
+helm upgrade ... --set opa.image.tag=latest
+
+# Or disable v0Compatible if using newer Rego syntax
+helm upgrade ... --set opa.v0Compatible=false
+```
+
+### AgentAuth CrashLoopBackOff
+
+**Problem**: Missing signing key secret
+
+```bash
+# Check pod logs
+kubectl logs -n <namespace> -l app.kubernetes.io/component=agentauth
+
+# Create signing key secret
+./scripts/create-signing-key-secret.sh <namespace>
+
+# Restart deployment
+kubectl rollout restart deployment/<release>-agentauth -n <namespace>
+```
