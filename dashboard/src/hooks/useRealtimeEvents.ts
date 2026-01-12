@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWebSocket } from './useWebSocket';
 import { useNotifications } from '../context/NotificationContext';
@@ -32,7 +32,7 @@ export function useRealtimeEvents() {
           });
 
           // Show notification for denied or high-risk events
-          if (settings.notifications) {
+          if (settings.showNotifications) {
             if (event.decision === 'deny') {
               addNotification({
                 type: 'warning',
@@ -62,7 +62,7 @@ export function useRealtimeEvents() {
 
         case 'alert': {
           const alert = message.data as { severity: 'critical' | 'warning' | 'info'; message: string };
-          if (settings.notifications) {
+          if (settings.showNotifications) {
             addNotification({
               type: alert.severity === 'critical' ? 'error' : alert.severity,
               title: 'System Alert',
@@ -74,14 +74,14 @@ export function useRealtimeEvents() {
         }
       }
     },
-    [queryClient, addNotification, settings.notifications]
+    [queryClient, addNotification, settings.showNotifications]
   );
 
   const { isConnected, lastMessage, reconnect } = useWebSocket({
     url: `${settings.apiUrl.replace('http', 'ws')}/ws`,
     onMessage: handleMessage,
     onOpen: () => {
-      if (settings.notifications) {
+      if (settings.showNotifications) {
         addNotification({
           type: 'success',
           title: 'Connected',
@@ -91,7 +91,7 @@ export function useRealtimeEvents() {
       }
     },
     onClose: () => {
-      if (settings.notifications) {
+      if (settings.showNotifications) {
         addNotification({
           type: 'warning',
           title: 'Disconnected',

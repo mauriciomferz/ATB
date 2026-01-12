@@ -129,23 +129,23 @@ export default function TokenInspector() {
             
             {/* Key Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {decoded.payload.sub && (
+              {'sub' in decoded.payload && decoded.payload.sub != null && (
                 <div>
                   <dt className="text-sm text-gray-500 dark:text-gray-400">Subject (Agent)</dt>
                   <dd className="font-mono text-sm text-gray-900 dark:text-gray-100 break-all">
-                    {decoded.payload.sub as string}
+                    {String(decoded.payload.sub)}
                   </dd>
                 </div>
               )}
-              {decoded.payload.act && (
+              {'act' in decoded.payload && decoded.payload.act != null && (
                 <div>
                   <dt className="text-sm text-gray-500 dark:text-gray-400">Action</dt>
                   <dd className="font-mono text-sm text-gray-900 dark:text-gray-100">
-                    {decoded.payload.act as string}
+                    {String(decoded.payload.act)}
                   </dd>
                 </div>
               )}
-              {decoded.payload.iat && (
+              {'iat' in decoded.payload && decoded.payload.iat != null && (
                 <div>
                   <dt className="text-sm text-gray-500 dark:text-gray-400">Issued At</dt>
                   <dd className="text-sm text-gray-900 dark:text-gray-100">
@@ -153,7 +153,7 @@ export default function TokenInspector() {
                   </dd>
                 </div>
               )}
-              {decoded.payload.exp && (
+              {'exp' in decoded.payload && decoded.payload.exp != null && (
                 <div>
                   <dt className="text-sm text-gray-500 dark:text-gray-400">Expires At</dt>
                   <dd className={`text-sm ${isExpired ? 'text-danger-600' : 'text-gray-900 dark:text-gray-100'}`}>
@@ -161,18 +161,18 @@ export default function TokenInspector() {
                   </dd>
                 </div>
               )}
-              {decoded.payload.jti && (
+              {'jti' in decoded.payload && decoded.payload.jti != null && (
                 <div>
                   <dt className="text-sm text-gray-500 dark:text-gray-400">Token ID (jti)</dt>
                   <dd className="font-mono text-sm text-gray-900 dark:text-gray-100">
-                    {decoded.payload.jti as string}
+                    {String(decoded.payload.jti)}
                   </dd>
                 </div>
               )}
             </div>
 
             {/* Legal Grounding */}
-            {decoded.payload.leg && (
+            {'leg' in decoded.payload && decoded.payload.leg != null && (
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Legal Grounding
@@ -186,7 +186,7 @@ export default function TokenInspector() {
             )}
 
             {/* Constraints */}
-            {decoded.payload.con && (
+            {'con' in decoded.payload && decoded.payload.con != null && (
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Constraints

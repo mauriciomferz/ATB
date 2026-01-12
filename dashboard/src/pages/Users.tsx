@@ -62,7 +62,7 @@ export default function Users() {
   const queryClient = useQueryClient();
   const { addNotification } = useNotifications();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newUser, setNewUser] = useState({ email: '', name: '', role: 'viewer' as const });
+  const [newUser, setNewUser] = useState<{ email: string; name: string; role: 'admin' | 'operator' | 'viewer' }>({ email: '', name: '', role: 'viewer' });
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],

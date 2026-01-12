@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchAgents } from '../api';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function Agents() {
   const { data: agents, isLoading } = useQuery({
