@@ -187,9 +187,9 @@ jobs:
 
       - name: Install OPA
         run: |
-          curl -L -o opa https://openpolicyagent.org/downloads/v0.60.0/opa_linux_amd64_static
-          chmod +x opa
-          sudo mv opa /usr/local/bin/
+          curl -L -o opa_binary https://openpolicyagent.org/downloads/v0.60.0/opa_linux_amd64_static
+          chmod +x opa_binary
+          sudo mv opa_binary /usr/local/bin/opa
 
       - name: Run policy tests
         working-directory: opa/policy
