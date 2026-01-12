@@ -83,13 +83,16 @@ kubectl logs -n atb -l app=atb-broker
 - [Getting Started](docs/getting-started.md) - Quick start guide for developers
 - [Architecture Guide](docs/architecture.md) - System design and components
 - [Authentication Guide](docs/authentication.md) - SPIFFE identity and PoA tokens
-- [API Reference - Broker](docs/openapi.yaml) - OpenAPI spec for ATB Broker
-- [API Reference - AgentAuth](docs/openapi-agentauth.yaml) - OpenAPI spec for AgentAuth
+- [API Reference](docs/api-reference.md) - Practical API examples and SDK usage
+- [API Spec - Broker](docs/openapi.yaml) - OpenAPI spec for ATB Broker
+- [API Spec - AgentAuth](docs/openapi-agentauth.yaml) - OpenAPI spec for AgentAuth
 - [Client Examples](examples/) - Python and Go client implementations
+- [Production Deployment](docs/production-deployment.md) - HA, security, and operations
+- [Kubernetes Quickstart](docs/k8s-quickstart.md) - Basic deployment guide
+- [Security Best Practices](docs/security-best-practices.md) - Hardening guide
 - [Observability Guide](docs/observability.md) - Metrics, logging, alerting
 - [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
 - [FAQ](docs/faq.md) - Frequently asked questions
-- [Kubernetes Quickstart](docs/k8s-quickstart.md) - Deployment guide
 - [Operating Model](docs/operating-model.md) - RACI, approval flows, risk thresholds
 - [Enterprise Actions](docs/enterprise-actions.md) - 145+ actions with constraint rules
 - [Audit Events](docs/audit.md) - Event format, SIEM integration, querying
