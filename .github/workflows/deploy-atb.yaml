@@ -176,6 +176,8 @@ jobs:
     needs: [lint-and-package, build-and-push-images, security-audit, opa-policy-test]
     runs-on: ubuntu-latest
     environment: staging
+    # Skip if no cluster is configured (set DEPLOY_ENABLED=true in repository variables)
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -238,7 +240,8 @@ jobs:
     needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deployProd == 'true' }}
+    # Only deploy to prod on manual trigger with deployProd=true AND cluster configured
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deployProd == 'true' && vars.DEPLOY_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v4
 
