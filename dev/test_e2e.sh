@@ -142,9 +142,9 @@ if test_opa_policy \
     "Low-risk action (health check)" \
     '{"request": {"method": "GET", "path": "/health"}}' \
     "true"; then
-    ((PASS++))
+    PASS=$((PASS + 1))
 else
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 fi
 
 # Test 2: Low-risk action with valid PoA
@@ -152,9 +152,9 @@ if test_opa_policy \
     "Low-risk action with PoA" \
     "{\"agent\": {\"spiffe_id\": \"spiffe://example.org/agent\"}, \"poa\": {\"act\": \"system.status.read\", \"sub\": \"spiffe://example.org/agent\", \"exp\": $EXP, \"iat\": $IAT, \"jti\": \"test-123\", \"con\": {}, \"leg\": {\"basis\": \"contract\", \"jurisdiction\": \"US\", \"accountable_party\": {\"type\": \"human\", \"id\": \"user@example.com\"}}}, \"request\": {\"method\": \"GET\", \"path\": \"/status\", \"action\": \"system.status.read\"}}" \
     "true"; then
-    ((PASS++))
+    PASS=$((PASS + 1))
 else
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 fi
 
 # Test 3: Medium-risk action without approval should be denied
@@ -162,9 +162,9 @@ if test_opa_policy \
     "Medium-risk action without approval (should deny)" \
     "{\"agent\": {\"spiffe_id\": \"spiffe://example.org/agent\"}, \"poa\": {\"act\": \"crm.contact.update\", \"sub\": \"spiffe://example.org/agent\", \"exp\": $EXP, \"iat\": $IAT, \"jti\": \"test-456\", \"con\": {}, \"leg\": {\"basis\": \"contract\", \"jurisdiction\": \"US\", \"accountable_party\": {\"type\": \"human\", \"id\": \"user@example.com\"}}}, \"request\": {\"method\": \"POST\", \"path\": \"/crm/contact\", \"action\": \"crm.contact.update\"}}" \
     "false"; then
-    ((PASS++))
+    PASS=$((PASS + 1))
 else
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 fi
 
 # Test 4: Medium-risk action with approval should be allowed
@@ -172,9 +172,9 @@ if test_opa_policy \
     "Medium-risk action with approval" \
     "{\"agent\": {\"spiffe_id\": \"spiffe://example.org/agent\"}, \"poa\": {\"act\": \"crm.contact.update\", \"sub\": \"spiffe://example.org/agent\", \"exp\": $EXP, \"iat\": $IAT, \"jti\": \"test-789\", \"con\": {}, \"leg\": {\"basis\": \"contract\", \"jurisdiction\": \"US\", \"accountable_party\": {\"type\": \"human\", \"id\": \"user@example.com\"}, \"approval\": {\"approver_id\": \"manager@example.com\", \"timestamp\": \"2026-01-11T10:00:00Z\"}}}, \"request\": {\"method\": \"POST\", \"path\": \"/crm/contact\", \"action\": \"crm.contact.update\"}}" \
     "true"; then
-    ((PASS++))
+    PASS=$((PASS + 1))
 else
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 fi
 
 # Test 5: High-risk action without dual control should be denied
@@ -182,9 +182,9 @@ if test_opa_policy \
     "High-risk action without dual control (should deny)" \
     "{\"agent\": {\"spiffe_id\": \"spiffe://example.org/agent\"}, \"poa\": {\"act\": \"sap.payment.execute\", \"sub\": \"spiffe://example.org/agent\", \"exp\": $EXP, \"iat\": $IAT, \"jti\": \"test-high-1\", \"con\": {\"payment_limit\": 100000}, \"leg\": {\"basis\": \"contract\", \"jurisdiction\": \"US\", \"accountable_party\": {\"type\": \"human\", \"id\": \"user@example.com\"}, \"approval\": {\"approver_id\": \"manager@example.com\", \"timestamp\": \"2026-01-11T10:00:00Z\"}}}, \"request\": {\"method\": \"POST\", \"path\": \"/sap/payment\", \"action\": \"sap.payment.execute\", \"params\": {\"amount\": 5000, \"payment_type\": \"standard\"}}}" \
     "false"; then
-    ((PASS++))
+    PASS=$((PASS + 1))
 else
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 fi
 
 # Test 6: High-risk action with dual control should be allowed
@@ -192,9 +192,9 @@ if test_opa_policy \
     "High-risk action with dual control" \
     "{\"agent\": {\"spiffe_id\": \"spiffe://example.org/agent\"}, \"poa\": {\"act\": \"sap.payment.execute\", \"sub\": \"spiffe://example.org/agent\", \"exp\": $EXP, \"iat\": $IAT, \"jti\": \"test-high-2\", \"con\": {\"payment_limit\": 100000}, \"leg\": {\"basis\": \"contract\", \"jurisdiction\": \"US\", \"accountable_party\": {\"type\": \"human\", \"id\": \"user@example.com\"}, \"dual_control\": {\"required\": true, \"approvers\": [{\"id\": \"approver1@example.com\", \"timestamp\": \"2026-01-11T10:00:00Z\"}, {\"id\": \"approver2@example.com\", \"timestamp\": \"2026-01-11T10:01:00Z\"}]}}}, \"request\": {\"method\": \"POST\", \"path\": \"/sap/payment\", \"action\": \"sap.payment.execute\", \"params\": {\"amount\": 5000, \"payment_type\": \"standard\"}}}" \
     "true"; then
-    ((PASS++))
+    PASS=$((PASS + 1))
 else
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 fi
 
 # Test 7: Missing legal basis should be denied
@@ -202,9 +202,9 @@ if test_opa_policy \
     "Missing legal basis (should deny)" \
     "{\"agent\": {\"spiffe_id\": \"spiffe://example.org/agent\"}, \"poa\": {\"act\": \"system.status.read\", \"sub\": \"spiffe://example.org/agent\", \"exp\": $EXP, \"iat\": $IAT, \"jti\": \"test-noleg\", \"con\": {}}, \"request\": {\"method\": \"GET\", \"path\": \"/status\", \"action\": \"system.status.read\"}}" \
     "false"; then
-    ((PASS++))
+    PASS=$((PASS + 1))
 else
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 fi
 
 echo ""
