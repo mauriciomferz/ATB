@@ -39,12 +39,12 @@ class TestAgentAuthHealth:
 
     @pytest.mark.asyncio
     async def test_ready_endpoint(self):
-        """Ready endpoint should return 'ok'."""
+        """Ready endpoint should return 'ready'."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(f"{AGENTAUTH_URL}/ready", timeout=5.0)
                 assert response.status_code == 200
-                assert response.text.strip() == "ok"
+                assert response.text.strip() == "ready"
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -54,15 +54,14 @@ class TestAgentAuthHealth:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
-                    f"{AGENTAUTH_URL}/.well-known/jwks.json",
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/.well-known/jwks.json", timeout=5.0
                 )
                 assert response.status_code == 200
                 data = response.json()
-                
+
                 assert "keys" in data
                 assert len(data["keys"]) > 0
-                
+
                 key = data["keys"][0]
                 assert key["kty"] == "OKP"
                 assert key["crv"] == "Ed25519"
@@ -90,27 +89,25 @@ class TestChallengeCreation:
                         "jurisdiction": "US",
                         "accountable_party": {
                             "type": "human",
-                            "id": "test@example.com"
-                        }
-                    }
+                            "id": "test@example.com",
+                        },
+                    },
                 }
-                
+
                 response = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
-                
+
                 assert response.status_code == 200
                 data = response.json()
-                
+
                 assert "challenge_id" in data
                 assert data["challenge_id"].startswith("chal_")
                 assert "expires_at" in data
                 assert "requires_dual_control" in data
                 assert "approvers_needed" in data
                 assert data["approvers_needed"] >= 1
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -122,17 +119,15 @@ class TestChallengeCreation:
                 request_data = {
                     "act": "crm.contact.read",
                     "con": {},
-                    "leg": {"basis": "contract"}
+                    "leg": {"basis": "contract"},
                 }
-                
+
                 response = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
-                
+
                 assert response.status_code == 400
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -145,17 +140,15 @@ class TestChallengeCreation:
                     "agent_spiffe_id": "not-a-valid-spiffe-id",
                     "act": "crm.contact.read",
                     "con": {},
-                    "leg": {"basis": "contract"}
+                    "leg": {"basis": "contract"},
                 }
-                
+
                 response = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
-                
+
                 assert response.status_code == 400
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -167,17 +160,15 @@ class TestChallengeCreation:
                 request_data = {
                     "agent_spiffe_id": "spiffe://example.org/agent/test",
                     "con": {},
-                    "leg": {"basis": "contract"}
+                    "leg": {"basis": "contract"},
                 }
-                
+
                 response = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
-                
+
                 assert response.status_code == 400
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -193,22 +184,23 @@ class TestChallengeCreation:
                     "leg": {
                         "basis": "contract",
                         "jurisdiction": "US",
-                        "accountable_party": {"type": "human", "id": "admin@example.com"}
-                    }
+                        "accountable_party": {
+                            "type": "human",
+                            "id": "admin@example.com",
+                        },
+                    },
                 }
-                
+
                 response = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
-                
+
                 assert response.status_code == 200
                 data = response.json()
-                
+
                 assert data["requires_dual_control"] == True
                 assert data["approvers_needed"] == 2
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -216,7 +208,9 @@ class TestChallengeCreation:
 class TestChallengeApproval:
     """Test challenge approval endpoint."""
 
-    async def _create_challenge(self, client: httpx.AsyncClient, action: str = "crm.contact.read") -> str:
+    async def _create_challenge(
+        self, client: httpx.AsyncClient, action: str = "crm.contact.read"
+    ) -> str:
         """Helper to create a challenge and return its ID."""
         request_data = {
             "agent_spiffe_id": "spiffe://example.org/agent/test",
@@ -225,13 +219,11 @@ class TestChallengeApproval:
             "leg": {
                 "basis": "contract",
                 "jurisdiction": "US",
-                "accountable_party": {"type": "human", "id": "user@example.com"}
-            }
+                "accountable_party": {"type": "human", "id": "user@example.com"},
+            },
         }
         response = await client.post(
-            f"{AGENTAUTH_URL}/v1/challenge",
-            json=request_data,
-            timeout=5.0
+            f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
         )
         return response.json()["challenge_id"]
 
@@ -242,28 +234,26 @@ class TestChallengeApproval:
             try:
                 # Create challenge first
                 challenge_id = await self._create_challenge(client)
-                
+
                 # Approve it
                 approve_data = {
                     "challenge_id": challenge_id,
-                    "approver": "approver@example.com"
+                    "approver": "approver@example.com",
                 }
-                
+
                 response = await client.post(
-                    f"{AGENTAUTH_URL}/v1/approve",
-                    json=approve_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/approve", json=approve_data, timeout=5.0
                 )
-                
+
                 assert response.status_code == 200
                 data = response.json()
-                
+
                 assert data["status"] == "approved"
                 assert data["fully_approved"] == True
                 assert data["approvers_count"] == 1
                 assert len(data["approvers"]) == 1
                 assert data["approvers"][0]["id"] == "approver@example.com"
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -274,17 +264,15 @@ class TestChallengeApproval:
             try:
                 approve_data = {
                     "challenge_id": "chal_nonexistent_12345",
-                    "approver": "approver@example.com"
+                    "approver": "approver@example.com",
                 }
-                
+
                 response = await client.post(
-                    f"{AGENTAUTH_URL}/v1/approve",
-                    json=approve_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/approve", json=approve_data, timeout=5.0
                 )
-                
+
                 assert response.status_code == 404
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -293,18 +281,14 @@ class TestChallengeApproval:
         """Should reject approval without challenge ID."""
         async with httpx.AsyncClient() as client:
             try:
-                approve_data = {
-                    "approver": "approver@example.com"
-                }
-                
+                approve_data = {"approver": "approver@example.com"}
+
                 response = await client.post(
-                    f"{AGENTAUTH_URL}/v1/approve",
-                    json=approve_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/approve", json=approve_data, timeout=5.0
                 )
-                
+
                 assert response.status_code == 400
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -322,23 +306,21 @@ class TestMandateIssuance:
             "leg": {
                 "basis": "contract",
                 "jurisdiction": "US",
-                "accountable_party": {"type": "human", "id": "user@example.com"}
-            }
+                "accountable_party": {"type": "human", "id": "user@example.com"},
+            },
         }
         create_resp = await client.post(
-            f"{AGENTAUTH_URL}/v1/challenge",
-            json=request_data,
-            timeout=5.0
+            f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
         )
         challenge_id = create_resp.json()["challenge_id"]
-        
+
         # Approve
         await client.post(
             f"{AGENTAUTH_URL}/v1/approve",
             json={"challenge_id": challenge_id, "approver": "approver@example.com"},
-            timeout=5.0
+            timeout=5.0,
         )
-        
+
         return challenge_id
 
     @pytest.mark.asyncio
@@ -347,23 +329,23 @@ class TestMandateIssuance:
         async with httpx.AsyncClient() as client:
             try:
                 challenge_id = await self._create_and_approve_challenge(client)
-                
+
                 response = await client.post(
                     f"{AGENTAUTH_URL}/v1/mandate",
                     json={"challenge_id": challenge_id},
-                    timeout=5.0
+                    timeout=5.0,
                 )
-                
+
                 assert response.status_code == 200
                 data = response.json()
-                
+
                 assert "token" in data
                 assert "expires_at" in data
                 assert "jti" in data
                 assert data["jti"].startswith("poa_")
                 assert "approvers_count" in data
                 assert data["approvers_count"] >= 1
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -373,18 +355,18 @@ class TestMandateIssuance:
         async with httpx.AsyncClient() as client:
             try:
                 challenge_id = await self._create_and_approve_challenge(client)
-                
+
                 response = await client.post(
                     f"{AGENTAUTH_URL}/v1/mandate",
                     json={"challenge_id": challenge_id},
-                    timeout=5.0
+                    timeout=5.0,
                 )
-                
+
                 token = response.json()["token"]
-                
+
                 # Decode without verification to check structure
                 unverified = jwt.decode(token, options={"verify_signature": False})
-                
+
                 assert "act" in unverified
                 assert unverified["act"] == "crm.contact.read"
                 assert "con" in unverified
@@ -395,7 +377,7 @@ class TestMandateIssuance:
                 assert "exp" in unverified
                 assert "iat" in unverified
                 assert "jti" in unverified
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -409,28 +391,32 @@ class TestMandateIssuance:
                     "agent_spiffe_id": "spiffe://example.org/agent/test",
                     "act": "crm.contact.read",
                     "con": {},
-                    "leg": {"basis": "contract", "jurisdiction": "US", 
-                            "accountable_party": {"type": "human", "id": "user@example.com"}}
+                    "leg": {
+                        "basis": "contract",
+                        "jurisdiction": "US",
+                        "accountable_party": {
+                            "type": "human",
+                            "id": "user@example.com",
+                        },
+                    },
                 }
                 create_resp = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
                 challenge_id = create_resp.json()["challenge_id"]
-                
+
                 # Try to get mandate without approval
                 response = await client.post(
                     f"{AGENTAUTH_URL}/v1/mandate",
                     json={"challenge_id": challenge_id},
-                    timeout=5.0
+                    timeout=5.0,
                 )
-                
+
                 assert response.status_code == 403
                 data = response.json()
                 assert "error" in data
                 assert "not fully approved" in data["error"]
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -442,11 +428,11 @@ class TestMandateIssuance:
                 response = await client.post(
                     f"{AGENTAUTH_URL}/v1/mandate",
                     json={"challenge_id": "chal_nonexistent"},
-                    timeout=5.0
+                    timeout=5.0,
                 )
-                
+
                 assert response.status_code == 404
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -467,59 +453,66 @@ class TestDualControlFlow:
                     "leg": {
                         "basis": "contract",
                         "jurisdiction": "US",
-                        "accountable_party": {"type": "human", "id": "admin@example.com"}
-                    }
+                        "accountable_party": {
+                            "type": "human",
+                            "id": "admin@example.com",
+                        },
+                    },
                 }
-                
+
                 create_resp = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
-                
+
                 assert create_resp.status_code == 200
                 data = create_resp.json()
                 challenge_id = data["challenge_id"]
-                
+
                 assert data["requires_dual_control"] == True
                 assert data["approvers_needed"] == 2
-                
+
                 # First approval
                 approve1_resp = await client.post(
                     f"{AGENTAUTH_URL}/v1/approve",
-                    json={"challenge_id": challenge_id, "approver": "approver1@example.com"},
-                    timeout=5.0
+                    json={
+                        "challenge_id": challenge_id,
+                        "approver": "approver1@example.com",
+                    },
+                    timeout=5.0,
                 )
-                
+
                 assert approve1_resp.status_code == 200
                 approve1_data = approve1_resp.json()
                 assert approve1_data["fully_approved"] == False
                 assert approve1_data["approvers_count"] == 1
-                
+
                 # Second approval (different approver)
                 approve2_resp = await client.post(
                     f"{AGENTAUTH_URL}/v1/approve",
-                    json={"challenge_id": challenge_id, "approver": "approver2@example.com"},
-                    timeout=5.0
+                    json={
+                        "challenge_id": challenge_id,
+                        "approver": "approver2@example.com",
+                    },
+                    timeout=5.0,
                 )
-                
+
                 assert approve2_resp.status_code == 200
                 approve2_data = approve2_resp.json()
                 assert approve2_data["fully_approved"] == True
                 assert approve2_data["approvers_count"] == 2
-                
+
                 # Now mandate should succeed
                 mandate_resp = await client.post(
                     f"{AGENTAUTH_URL}/v1/mandate",
                     json={"challenge_id": challenge_id},
-                    timeout=5.0
+                    timeout=5.0,
                 )
-                
+
                 assert mandate_resp.status_code == 200
                 mandate_data = mandate_resp.json()
                 assert mandate_data["dual_control_used"] == True
                 assert mandate_data["approvers_count"] == 2
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -536,33 +529,34 @@ class TestDualControlFlow:
                     "leg": {
                         "basis": "contract",
                         "jurisdiction": "US",
-                        "accountable_party": {"type": "human", "id": "finance@example.com"}
-                    }
+                        "accountable_party": {
+                            "type": "human",
+                            "id": "finance@example.com",
+                        },
+                    },
                 }
-                
+
                 create_resp = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
                 challenge_id = create_resp.json()["challenge_id"]
-                
+
                 # First approval
                 await client.post(
                     f"{AGENTAUTH_URL}/v1/approve",
                     json={"challenge_id": challenge_id, "approver": "same@example.com"},
-                    timeout=5.0
+                    timeout=5.0,
                 )
-                
+
                 # Same approver tries again
                 approve2_resp = await client.post(
                     f"{AGENTAUTH_URL}/v1/approve",
                     json={"challenge_id": challenge_id, "approver": "same@example.com"},
-                    timeout=5.0
+                    timeout=5.0,
                 )
-                
+
                 assert approve2_resp.status_code == 409  # Conflict
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -580,25 +574,28 @@ class TestChallengeRetrieval:
                     "agent_spiffe_id": "spiffe://example.org/agent/test",
                     "act": "crm.contact.read",
                     "con": {},
-                    "leg": {"basis": "contract", "jurisdiction": "US",
-                            "accountable_party": {"type": "human", "id": "user@example.com"}}
+                    "leg": {
+                        "basis": "contract",
+                        "jurisdiction": "US",
+                        "accountable_party": {
+                            "type": "human",
+                            "id": "user@example.com",
+                        },
+                    },
                 }
                 create_resp = await client.post(
-                    f"{AGENTAUTH_URL}/v1/challenge",
-                    json=request_data,
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge", json=request_data, timeout=5.0
                 )
                 challenge_id = create_resp.json()["challenge_id"]
-                
+
                 # Get status
                 response = await client.get(
-                    f"{AGENTAUTH_URL}/v1/challenge/{challenge_id}",
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge/{challenge_id}", timeout=5.0
                 )
-                
+
                 assert response.status_code == 200
                 data = response.json()
-                
+
                 assert data["challenge_id"] == challenge_id
                 assert "action" in data
                 assert "agent_spiffe_id" in data
@@ -607,7 +604,7 @@ class TestChallengeRetrieval:
                 assert "expired" in data
                 assert data["expired"] == False
                 assert "fully_approved" in data
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
@@ -617,11 +614,10 @@ class TestChallengeRetrieval:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
-                    f"{AGENTAUTH_URL}/v1/challenge/chal_nonexistent",
-                    timeout=5.0
+                    f"{AGENTAUTH_URL}/v1/challenge/chal_nonexistent", timeout=5.0
                 )
-                
+
                 assert response.status_code == 404
-                
+
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
