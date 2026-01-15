@@ -11,7 +11,7 @@ import httpx
 
 # Service URLs from environment or defaults
 BROKER_URL = os.environ.get("ATB_BROKER_URL", "http://localhost:8080")
-AGENTAUTH_URL = os.environ.get("ATB_AGENTAUTH_URL", "http://localhost:9090")
+AGENTAUTH_URL = os.environ.get("ATB_AGENTAUTH_URL", "http://localhost:8444")
 OPA_URL = os.environ.get("ATB_OPA_URL", "http://localhost:8181")
 
 
