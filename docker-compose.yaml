@@ -45,7 +45,7 @@ services:
     image: python:3.11-slim
     container_name: atb-upstream
     ports:
-      - "9000:9000"
+      - "9001:9000"
     volumes:
       - ./dev/upstream_echo.py:/app/upstream_echo.py:ro
     working_dir: /app

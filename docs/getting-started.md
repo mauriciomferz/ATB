@@ -37,15 +37,16 @@ make docker-up
 
 This starts:
 - **OPA** (port 8181) - Policy engine
-- **Upstream Echo** (port 9000) - Test backend
-- **Broker** (port 8443) - ATB gateway
+- **Upstream Echo** (port 9000) - Test backend (see note below)
 - **AgentAuth** (port 8444) - PoA issuance service
+
+> **Note:** Port 9000 may conflict with Zscaler or other corporate security software. If the upstream container fails to start, see the [Troubleshooting](#troubleshooting) section.
 
 ### 4. Verify It's Running
 
 ```bash
-# Check health
-curl -k https://localhost:8443/health
+# Check AgentAuth health
+curl http://localhost:8444/health
 
 # Check OPA policy
 curl http://localhost:8181/v1/data/atb/poa
@@ -68,13 +69,13 @@ For medium/high-risk actions, you need a Proof-of-Authorization (PoA) token:
 
 ```bash
 # Request a challenge
-curl -k -X POST https://localhost:8444/v1/challenge \
+curl -X POST http://localhost:8444/v1/challenge \
   -H "Content-Type: application/json" \
   -d '{
     "agent_spiffe_id": "spiffe://example.org/agent/demo",
-    "action": "crm.contact.read",
-    "constraints": {},
-    "legal_basis": {
+    "act": "crm.contact.read",
+    "con": {},
+    "leg": {
       "basis": "contract",
       "jurisdiction": "US",
       "accountable_party": {
@@ -85,44 +86,71 @@ curl -k -X POST https://localhost:8444/v1/challenge \
   }'
 ```
 
+> **Note:** Use `act`, `con`, and `leg` (not `action`, `constraints`, `legal_basis`).
+
 Response:
 ```json
 {
-  "challenge_id": "ch_abc123",
-  "expires_at": "2026-01-12T12:00:00Z",
-  "requires_approval": true,
-  "risk_tier": "medium"
+  "challenge_id": "chal_b2ihD73Vx5Oz548HlNnbMA",
+  "expires_at": "2026-01-14T19:29:36Z",
+  "requires_dual_control": false,
+  "approvers_needed": 1,
+  "approval_hint": "POST /v1/approve with challenge_id and approver identity"
 }
 ```
 
-### Step 3: Approve the Request
+### Step 3: Approve the Challenge
 
 For medium-risk actions, one approver is needed:
 
 ```bash
-curl -k -X POST https://localhost:8444/v1/challenge/ch_abc123/approve \
+curl -X POST http://localhost:8444/v1/approve \
   -H "Content-Type: application/json" \
   -d '{
-    "approver_id": "manager@example.com",
-    "reason": "Approved for customer support case #1234"
+    "challenge_id": "chal_b2ihD73Vx5Oz548HlNnbMA",
+    "approver": "manager@example.com"
   }'
 ```
 
-Response includes the signed PoA token:
+Response:
 ```json
 {
-  "poa": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "expires_at": "2026-01-12T12:05:00Z"
+  "status": "approved",
+  "approvers": [{"id": "manager@example.com", "approved_at": "2026-01-14T19:25:21Z"}],
+  "approvers_count": 1,
+  "approvers_needed": 1,
+  "fully_approved": true
 }
 ```
 
-### Step 4: Make an Authorized Request
+### Step 4: Get the PoA Token (Mandate)
 
-Include the PoA token in the `X-Poa-Token` header:
+Once approved, retrieve the signed PoA token:
 
 ```bash
-curl -k https://localhost:8443/crm/contacts \
-  -H "X-Poa-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+curl -X POST http://localhost:8444/v1/mandate \
+  -H "Content-Type: application/json" \
+  -d '{"challenge_id": "chal_b2ihD73Vx5Oz548HlNnbMA"}'
+```
+
+Response:
+```json
+{
+  "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Ii4uLiIsInR5cCI6IkpXVCJ9...",
+  "expires_at": "2026-01-14T19:32:15Z",
+  "jti": "poa_8rfNn1PxNgMzwewG-4fR0g",
+  "dual_control_used": false,
+  "approvers_count": 1
+}
+```
+
+### Step 5: Make an Authorized Request
+
+Include the PoA token in the `Authorization` header:
+
+```bash
+curl http://localhost:8080/crm/contacts \
+  -H "Authorization: Bearer eyJhbGciOiJFZERTQSIsImtpZCI6Ii4uLiIsInR5cCI6IkpXVCJ9..."
 ```
 
 ## Understanding Risk Tiers
@@ -165,6 +193,38 @@ make demo
 - [Kubernetes Deployment](k8s-quickstart.md) - Deploy to production
 
 ## Troubleshooting
+
+### Port 9000 Already in Use (Zscaler/Corporate VPN)
+
+If you see this error:
+```
+Error response from daemon: ports are not available: exposing port TCP 0.0.0.0:9000
+```
+
+Port 9000 is likely used by Zscaler or similar corporate security software. Check with:
+```bash
+sudo lsof -i :9000
+```
+
+**Solution:** Edit `docker-compose.yaml` and change the upstream port mapping:
+```yaml
+upstream:
+  ports:
+    - "9001:9000"  # Changed from 9000:9000
+```
+
+### TLS/SSL Connection Errors
+
+If you see LibreSSL errors like:
+```
+curl: (35) LibreSSL/3.3.6: error:1404B42E:SSL routines
+```
+
+**Solution:** Use HTTP instead of HTTPS for local development:
+```bash
+# Instead of: curl -k https://localhost:8444/health
+curl http://localhost:8444/health
+```
 
 ### Docker Compose Won't Start
 
