@@ -3,8 +3,9 @@
 This document outlines security hardening measures for production deployment of the Agent Trust Broker.
 
 > **Last Updated:** January 2026
-> 
+>
 > **Implementation Status Legend:**
+>
 > - ✅ Implemented in code
 > - ⚠️ Requires configuration
 > - ❌ Not yet implemented
@@ -18,6 +19,7 @@ This document outlines security hardening measures for production deployment of 
 **Status:** Requires configuration for production.
 
 **Fix:**
+
 ```bash
 # Generate a production key
 openssl genpkey -algorithm Ed25519 -out poa-signing-key.pem
@@ -32,6 +34,7 @@ export POA_SIGNING_ED25519_PRIVKEY_PEM=$(cat poa-signing-key.pem)
 ```
 
 **Verification:**
+
 ```bash
 # Should NOT see this warning in logs:
 # "WARN: POA_SIGNING_ED25519_PRIVKEY_PEM not set; generating ephemeral key"
@@ -55,6 +58,7 @@ agentauth:
 ```
 
 **Verification:**
+
 ```bash
 # Without client cert - should fail
 curl https://agentauth:8443/v1/challenge
@@ -71,6 +75,7 @@ curl --cert agent.crt --key agent.key https://agentauth:8443/v1/challenge
 **Issue:** `/v1/approve` endpoint accepts any approver claim without verification.
 
 **Required Implementation:**
+
 - Require signed approval requests (JWT signed by approver's key)
 - Verify approver exists in identity provider
 - Validate approver has approval privileges for the action
@@ -104,6 +109,7 @@ func RequireSignedApproval(next http.Handler) http.Handler {
 **Status:** ✅ Implemented in AgentAuth service.
 
 **Configuration:**
+
 ```bash
 # Environment variables (defaults shown)
 RATE_LIMIT_PER_IP=100      # requests per minute per IP
@@ -111,12 +117,14 @@ RATE_LIMIT_PER_AGENT=20    # requests per minute per agent SPIFFE ID
 ```
 
 **Features:**
+
 - Per-IP rate limiting (default: 100/min)
 - Per-agent SPIFFE ID rate limiting (default: 20/min)
 - Returns HTTP 429 Too Many Requests with Retry-After header
 - Automatic cleanup of expired rate limit entries
 
 **Verification:**
+
 ```bash
 # Flood test - should see 429 responses after limit exceeded
 for i in $(seq 1 30); do
@@ -140,6 +148,7 @@ done
 - [x] Self-approval prevention (approver != accountable party)
 
 **Configuration:**
+
 ```bash
 # Disable self-approval prevention (NOT recommended)
 ALLOW_SELF_APPROVAL=true
@@ -152,6 +161,7 @@ ALLOW_SELF_APPROVAL=true
 **Status:** ✅ Implemented with strict validation.
 
 **Checks Performed:**
+
 - [x] Validate SPIFFE URI format strictly (regex)
 - [x] Reject path traversal attempts (`..`)
 - [x] Reject command injection characters (`$`, backticks, etc.)
@@ -159,11 +169,13 @@ ALLOW_SELF_APPROVAL=true
 - [x] Enforce maximum length (2048 chars)
 
 **Validation Regex:**
+
 ```go
 var validSPIFFE = regexp.MustCompile(`^spiffe://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(/[a-zA-Z0-9._-]+)+$`)
 ```
 
 **Verification:**
+
 ```bash
 # Path traversal - should return 400
 curl -X POST http://localhost:8444/v1/challenge \
@@ -185,6 +197,7 @@ curl -X POST http://localhost:8444/v1/challenge \
 **Issue:** Token constraints may not be validated against actual request.
 
 **Required:**
+
 - [ ] Broker validates `con.contact_id` matches request path
 - [ ] Broker validates `con.amount` matches request body
 - [ ] Reject requests that exceed token constraints
@@ -196,6 +209,7 @@ curl -X POST http://localhost:8444/v1/challenge \
 ### 8. Audit Logging
 
 **Required Events:**
+
 - [ ] Challenge creation (who, what action, when)
 - [ ] Approval (who approved, when)
 - [ ] Mandate issuance (token JTI, expiry)
@@ -220,6 +234,7 @@ curl -X POST http://localhost:8444/v1/challenge \
 ### 9. Challenge Expiry
 
 **Configuration:**
+
 ```yaml
 agentauth:
   challenge:
@@ -233,6 +248,7 @@ agentauth:
 ### 10. Input Validation
 
 **All Endpoints:**
+
 - [ ] Maximum request body size: 1MB
 - [ ] JSON depth limit: 10 levels
 - [ ] String length limits per field
@@ -248,7 +264,7 @@ agentauth:
 
 All responses include security headers:
 
-```
+```text
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
 X-Xss-Protection: 1; mode=block
@@ -256,6 +272,7 @@ Cache-Control: no-store, no-cache, must-revalidate
 ```
 
 **Verification:**
+
 ```bash
 curl -sI http://localhost:8444/health | grep -E '^X-'
 # Expected:
@@ -269,6 +286,7 @@ curl -sI http://localhost:8444/health | grep -E '^X-'
 ### 12. Key Rotation
 
 **Process:**
+
 1. Generate new signing key
 2. Add to JWKS with new `kid`
 3. Start signing new tokens with new key
@@ -306,6 +324,6 @@ kubectl logs -l app=atb-agentauth | grep "challenge.created"
 
 ## Security Contacts
 
-- Security issues: security@your-domain.com
+- Security issues: `security@your-domain.com`
 - Emergency: +1-xxx-xxx-xxxx
-- Bug bounty: https://your-domain.com/security
+- Bug bounty: `https://your-domain.com/security`
