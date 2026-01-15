@@ -26,6 +26,7 @@ make certs-poa
 ```
 
 This creates:
+
 - `dev/certs/` - TLS certificates for mTLS
 - `dev/poa_rsa.key` - RSA key for signing PoA tokens
 
@@ -36,6 +37,7 @@ make docker-up
 ```
 
 This starts:
+
 - **OPA** (port 8181) - Policy engine
 - **Upstream Echo** (port 9000) - Test backend (see note below)
 - **AgentAuth** (port 8444) - PoA issuance service
@@ -89,6 +91,7 @@ curl -X POST http://localhost:8444/v1/challenge \
 > **Note:** Use `act`, `con`, and `leg` (not `action`, `constraints`, `legal_basis`).
 
 Response:
+
 ```json
 {
   "challenge_id": "chal_b2ihD73Vx5Oz548HlNnbMA",
@@ -113,10 +116,13 @@ curl -X POST http://localhost:8444/v1/approve \
 ```
 
 Response:
+
 ```json
 {
   "status": "approved",
-  "approvers": [{"id": "manager@example.com", "approved_at": "2026-01-14T19:25:21Z"}],
+  "approvers": [
+    { "id": "manager@example.com", "approved_at": "2026-01-14T19:25:21Z" }
+  ],
   "approvers_count": 1,
   "approvers_needed": 1,
   "fully_approved": true
@@ -134,6 +140,7 @@ curl -X POST http://localhost:8444/v1/mandate \
 ```
 
 Response:
+
 ```json
 {
   "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Ii4uLiIsInR5cCI6IkpXVCJ9...",
@@ -155,11 +162,11 @@ curl http://localhost:8080/crm/contacts \
 
 ## Understanding Risk Tiers
 
-| Tier | Actions | Approval | Examples |
-|------|---------|----------|----------|
-| **Low** | 50+ | None | Health checks, FAQ queries, status reads |
-| **Medium** | 40+ | 1 approver | CRM updates, order management |
-| **High** | 60+ | 2 approvers (dual control) | Payments, PII export, IAM changes |
+| Tier       | Actions | Approval                   | Examples                                 |
+| ---------- | ------- | -------------------------- | ---------------------------------------- |
+| **Low**    | 50+     | None                       | Health checks, FAQ queries, status reads |
+| **Medium** | 40+     | 1 approver                 | CRM updates, order management            |
+| **High**   | 60+     | 2 approvers (dual control) | Payments, PII export, IAM changes        |
 
 ## Running Tests
 
@@ -197,30 +204,35 @@ make demo
 ### Port 9000 Already in Use (Zscaler/Corporate VPN)
 
 If you see this error:
+
 ```
 Error response from daemon: ports are not available: exposing port TCP 0.0.0.0:9000
 ```
 
 Port 9000 is likely used by Zscaler or similar corporate security software. Check with:
+
 ```bash
 sudo lsof -i :9000
 ```
 
 **Solution:** Edit `docker-compose.yaml` and change the upstream port mapping:
+
 ```yaml
 upstream:
   ports:
-    - "9001:9000"  # Changed from 9000:9000
+    - "9001:9000" # Changed from 9000:9000
 ```
 
 ### TLS/SSL Connection Errors
 
 If you see LibreSSL errors like:
+
 ```
 curl: (35) LibreSSL/3.3.6: error:1404B42E:SSL routines
 ```
 
 **Solution:** Use HTTP instead of HTTPS for local development:
+
 ```bash
 # Instead of: curl -k https://localhost:8444/health
 curl http://localhost:8444/health

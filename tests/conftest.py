@@ -55,12 +55,14 @@ async def services_available(http_client: httpx.AsyncClient) -> bool:
         broker_health = await http_client.get(f"{BROKER_URL}/health")
         opa_health = await http_client.get(f"{OPA_URL}/health")
         agentauth_health = await http_client.get(f"{AGENTAUTH_URL}/health")
-        
-        return all([
-            broker_health.status_code == 200,
-            opa_health.status_code == 200,
-            agentauth_health.status_code == 200
-        ])
+
+        return all(
+            [
+                broker_health.status_code == 200,
+                opa_health.status_code == 200,
+                agentauth_health.status_code == 200,
+            ]
+        )
     except httpx.ConnectError:
         return False
 
@@ -78,9 +80,9 @@ def sample_poa_low_risk():
                 "target": "storage",
                 "action": "read",
                 "resource": "/public/data.json",
-                "context": {}
+                "context": {},
             }
-        ]
+        ],
     }
 
 
@@ -97,7 +99,7 @@ def sample_poa_high_risk():
                 "target": "database",
                 "action": "delete",
                 "resource": "/records/all",
-                "context": {}
+                "context": {},
             }
-        ]
+        ],
     }

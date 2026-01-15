@@ -121,10 +121,10 @@ class TestApproverSecurity:
                     timeout=5.0,
                 )
 
-                # Self-approval should be rejected
-                # Note: This may not be implemented yet
-                if resp.status_code == 200:
-                    pytest.xfail("Self-approval should be rejected for segregation of duties")
+                # Self-approval should be rejected with 403 Forbidden
+                assert resp.status_code == 403, (
+                    f"Self-approval should be rejected (got {resp.status_code})"
+                )
 
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
@@ -216,11 +216,10 @@ class TestDualControlBypass:
                     timeout=5.0,
                 )
 
-                # Should detect as same approver
-                if resp.status_code == 200:
-                    pytest.xfail(
-                        "Case-insensitive approver matching not implemented"
-                    )
+                # Should detect as same approver with 409 Conflict
+                assert resp.status_code == 409, (
+                    f"Case variation should be detected as duplicate (got {resp.status_code})"
+                )
 
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
@@ -231,21 +230,21 @@ class TestRateLimiting:
 
     def test_challenge_flood_mitigated(self):
         """
-        Rapid challenge creation should be rate limited.
+        Rapid challenge creation should be rate limited per agent.
         
-        Status: Rate limiting may not be implemented.
+        Uses same agent ID to trigger per-agent rate limit (default: 20/min).
         """
         with httpx.Client() as client:
             try:
                 results = []
                 start = time.time()
 
-                # Send 50 requests rapidly
+                # Send 50 requests with SAME agent ID to trigger per-agent limit
                 for i in range(50):
                     resp = client.post(
                         f"{AGENTAUTH_URL}/v1/challenge",
                         json={
-                            "agent_spiffe_id": f"spiffe://example.org/agent/flood-{i}",
+                            "agent_spiffe_id": "spiffe://example.org/agent/flood-test",
                             "act": "crm.contact.read",
                             "con": {},
                             "leg": {
@@ -263,26 +262,24 @@ class TestRateLimiting:
                 # Count rate limited responses
                 rate_limited = sum(1 for code in results if code == 429)
 
-                # Document current behavior
-                if rate_limited == 0:
-                    pytest.xfail(
-                        f"No rate limiting detected. "
-                        f"Processed {len(results)} requests in {elapsed:.2f}s. "
-                        f"Implement rate limiting for production."
-                    )
-                else:
-                    assert rate_limited > 0, "Rate limiting should trigger"
+                # Per-agent limit should trigger (default 20/min)
+                assert rate_limited > 0, (
+                    f"No rate limiting detected. "
+                    f"Processed {len(results)} requests in {elapsed:.2f}s. "
+                    f"Expected rate limiting for production."
+                )
 
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
 
     def test_concurrent_challenge_flood(self):
-        """Concurrent requests should also be rate limited."""
+        """Concurrent requests should be rate limited per IP (100/min default)."""
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
                 futures = []
                 
-                for i in range(100):
+                # Use 150 requests to exceed IP rate limit (100/min)
+                for i in range(150):
                     futures.append(
                         executor.submit(
                             httpx.post,
@@ -311,11 +308,11 @@ class TestRateLimiting:
 
                 rate_limited = sum(1 for code in results if code == 429)
 
-                if rate_limited == 0:
-                    pytest.xfail(
-                        "Concurrent rate limiting not enforced. "
-                        f"All {len(results)} requests succeeded."
-                    )
+                # Per-IP rate limiting (100/min) should trigger for 150 requests
+                assert rate_limited > 0, (
+                    f"Concurrent rate limiting not enforced. "
+                    f"All {len(results)} requests succeeded."
+                )
 
         except httpx.ConnectError:
             pytest.skip("AgentAuth not running")
@@ -360,15 +357,12 @@ class TestSPIFFEIDValidation:
                     timeout=5.0,
                 )
 
-                # Should reject with 400 or 422
-                # Currently may accept (vulnerability)
-                if resp.status_code == 200:
-                    # OPA will validate later, but input validation should happen earlier
-                    pytest.xfail(
-                        f"SPIFFE ID validation should reject: {description}"
-                    )
-                else:
-                    assert resp.status_code in [400, 422]
+                # Should reject with 400, 422, or 429 (rate limited)
+                # SPIFFE ID validation is now implemented
+                assert resp.status_code in [400, 422, 429], (
+                    f"SPIFFE ID validation should reject {description}: "
+                    f"got {resp.status_code}"
+                )
 
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")

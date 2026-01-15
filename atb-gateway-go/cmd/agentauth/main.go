@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -20,11 +21,164 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rate Limiter
+// ─────────────────────────────────────────────────────────────────────────────
+
+type RateLimiter struct {
+	mu       sync.Mutex
+	requests map[string][]time.Time
+	limit    int           // max requests
+	window   time.Duration // time window
+}
+
+func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
+	rl := &RateLimiter{
+		requests: make(map[string][]time.Time),
+		limit:    limit,
+		window:   window,
+	}
+	// Cleanup goroutine
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for now := range ticker.C {
+			rl.cleanup(now)
+		}
+	}()
+	return rl
+}
+
+func (rl *RateLimiter) cleanup(now time.Time) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	cutoff := now.Add(-rl.window)
+	for key, times := range rl.requests {
+		var valid []time.Time
+		for _, t := range times {
+			if t.After(cutoff) {
+				valid = append(valid, t)
+			}
+		}
+		if len(valid) == 0 {
+			delete(rl.requests, key)
+		} else {
+			rl.requests[key] = valid
+		}
+	}
+}
+
+func (rl *RateLimiter) Allow(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-rl.window)
+
+	// Filter old requests
+	var valid []time.Time
+	for _, t := range rl.requests[key] {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+
+	if len(valid) >= rl.limit {
+		rl.requests[key] = valid
+		return false
+	}
+
+	rl.requests[key] = append(valid, now)
+	return true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Security Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// SPIFFE ID validation regex - strict format
+var validSPIFFEIDRegex = regexp.MustCompile(`^spiffe://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(/[a-zA-Z0-9._-]+)+$`)
+
+// validateSPIFFEID performs strict validation of SPIFFE IDs
+func validateSPIFFEID(id string) error {
+	if len(id) == 0 {
+		return errors.New("SPIFFE ID is empty")
+	}
+	if len(id) > 2048 {
+		return errors.New("SPIFFE ID too long (max 2048)")
+	}
+	if strings.Contains(id, "..") {
+		return errors.New("SPIFFE ID contains path traversal")
+	}
+	if strings.ContainsAny(id, "<>\"'`${}()[];|&\\") {
+		return errors.New("SPIFFE ID contains invalid characters")
+	}
+	if strings.Contains(id, "\x00") {
+		return errors.New("SPIFFE ID contains null byte")
+	}
+	if !validSPIFFEIDRegex.MatchString(id) {
+		return errors.New("SPIFFE ID format invalid")
+	}
+	return nil
+}
+
+// normalizeApproverID normalizes approver IDs for comparison
+func normalizeApproverID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+// getClientIP extracts client IP from request
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+	// Check X-Real-IP header
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	// Fall back to RemoteAddr
+	addr := r.RemoteAddr
+	if idx := strings.LastIndex(addr, ":"); idx != -1 {
+		return addr[:idx]
+	}
+	return addr
+}
+
+// securityHeaders adds security headers to responses
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data Types
+// ─────────────────────────────────────────────────────────────────────────────
+
 type ChallengeRequest struct {
 	AgentSPIFFEID string                 `json:"agent_spiffe_id"`
 	Act           string                 `json:"act"`
 	Con           map[string]interface{} `json:"con"`
 	Leg           map[string]interface{} `json:"leg"`
+}
+
+// getAccountablePartyID extracts the accountable party ID from the legal basis
+func (req *ChallengeRequest) getAccountablePartyID() string {
+	if ap, ok := req.Leg["accountable_party"].(map[string]interface{}); ok {
+		if id, ok := ap["id"].(string); ok {
+			return id
+		}
+	}
+	return ""
 }
 
 type Approver struct {
@@ -197,6 +351,26 @@ func main() {
 
 	approvalToken := strings.TrimSpace(os.Getenv("APPROVAL_SHARED_SECRET"))
 
+	// Rate limiting configuration
+	rateLimitPerIP := 100  // requests per minute per IP
+	rateLimitPerAgent := 20 // requests per minute per agent
+	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_PER_IP")); v != "" {
+		fmt.Sscanf(v, "%d", &rateLimitPerIP)
+	}
+	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_PER_AGENT")); v != "" {
+		fmt.Sscanf(v, "%d", &rateLimitPerAgent)
+	}
+	ipRateLimiter := NewRateLimiter(rateLimitPerIP, time.Minute)
+	agentRateLimiter := NewRateLimiter(rateLimitPerAgent, time.Minute)
+	log.Printf("Rate limiting: %d/min per IP, %d/min per agent", rateLimitPerIP, rateLimitPerAgent)
+
+	// Self-approval prevention (default: enabled)
+	preventSelfApproval := true
+	if v := strings.TrimSpace(os.Getenv("ALLOW_SELF_APPROVAL")); strings.ToLower(v) == "true" {
+		preventSelfApproval = false
+		log.Printf("WARN: Self-approval is ALLOWED (not recommended)")
+	}
+
 	// High-risk actions that always require dual control (comma-separated)
 	highRiskActions := parseHighRiskActions(os.Getenv("DUAL_CONTROL_ACTIONS"))
 	if len(highRiskActions) == 0 {
@@ -309,6 +483,15 @@ func main() {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
+		// Rate limiting by IP
+		clientIP := getClientIP(r)
+		if !ipRateLimiter.Allow(clientIP) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+
 		var req ChallengeRequest
 		if err := readJSON(r, &req); err != nil {
 			http.Error(w, "invalid json", http.StatusBadRequest)
@@ -316,10 +499,20 @@ func main() {
 		}
 		req.AgentSPIFFEID = strings.TrimSpace(req.AgentSPIFFEID)
 		req.Act = strings.TrimSpace(req.Act)
-		if req.AgentSPIFFEID == "" || !strings.HasPrefix(req.AgentSPIFFEID, "spiffe://") {
-			http.Error(w, "invalid agent_spiffe_id", http.StatusBadRequest)
+
+		// Strict SPIFFE ID validation
+		if err := validateSPIFFEID(req.AgentSPIFFEID); err != nil {
+			http.Error(w, fmt.Sprintf("invalid agent_spiffe_id: %s", err.Error()), http.StatusBadRequest)
 			return
 		}
+
+		// Rate limiting by agent
+		if !agentRateLimiter.Allow(req.AgentSPIFFEID) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "rate limit exceeded for agent", http.StatusTooManyRequests)
+			return
+		}
+
 		if req.Act == "" || req.Con == nil || req.Leg == nil {
 			http.Error(w, "missing act/con/leg", http.StatusBadRequest)
 			return
@@ -374,6 +567,8 @@ func main() {
 		}
 		id := strings.TrimSpace(body.ChallengeID)
 		approverID := strings.TrimSpace(body.Approver)
+		normalizedApproverID := normalizeApproverID(approverID)
+
 		if id == "" {
 			http.Error(w, "missing challenge_id", http.StatusBadRequest)
 			return
@@ -393,15 +588,24 @@ func main() {
 			return
 		}
 
-		// Check if this approver already approved
+		// Self-approval prevention: approver cannot be the accountable party
+		if preventSelfApproval {
+			accountablePartyID := normalizeApproverID(c.Req.getAccountablePartyID())
+			if accountablePartyID != "" && normalizedApproverID == accountablePartyID {
+				http.Error(w, "self-approval not allowed: approver cannot be the accountable party", http.StatusForbidden)
+				return
+			}
+		}
+
+		// Check if this approver already approved (case-insensitive)
 		for _, a := range c.Approvers {
-			if a.ID == approverID {
+			if normalizeApproverID(a.ID) == normalizedApproverID {
 				http.Error(w, "approver already approved this challenge", http.StatusConflict)
 				return
 			}
 		}
 
-		// Add this approver
+		// Add this approver (store original ID for display, but check normalized)
 		c.Approvers = append(c.Approvers, Approver{
 			ID:         approverID,
 			ApprovedAt: now,
@@ -518,6 +722,10 @@ func main() {
 		})
 	})
 
+	// Wrap with security headers middleware
+	handler := securityHeaders(mux)
+
 	log.Printf("ATB AgentAuth listening on %s (issuer=%s, kid=%s)", listenAddr, issuer, kid)
-	log.Fatal(http.ListenAndServe(listenAddr, mux))
+	log.Printf("Security: rate limiting enabled, self-approval prevention=%v", preventSelfApproval)
+	log.Fatal(http.ListenAndServe(listenAddr, handler))
 }

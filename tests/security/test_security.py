@@ -202,8 +202,8 @@ class TestInputValidation:
                         },
                         timeout=5.0,
                     )
-                    # NOTE: Currently AgentAuth accepts these IDs but they will be 
-                    # validated by OPA policy when the PoA is used. For stricter 
+                    # NOTE: Currently AgentAuth accepts these IDs but they will be
+                    # validated by OPA policy when the PoA is used. For stricter
                     # validation at challenge time, this test can be updated.
                     # Acceptable responses: rejection (400/422) or acceptance (200)
                     assert response.status_code in [

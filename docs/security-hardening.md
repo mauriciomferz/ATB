@@ -2,11 +2,20 @@
 
 This document outlines security hardening measures for production deployment of the Agent Trust Broker.
 
+> **Last Updated:** January 2026
+> 
+> **Implementation Status Legend:**
+> - ✅ Implemented in code
+> - ⚠️ Requires configuration
+> - ❌ Not yet implemented
+
 ## 🔴 Critical - Required for Production
 
-### 1. Signing Key Management
+### 1. Signing Key Management ⚠️
 
 **Issue:** Ephemeral keys are generated at startup if not configured.
+
+**Status:** Requires configuration for production.
 
 **Fix:**
 ```bash
@@ -88,65 +97,85 @@ func RequireSignedApproval(next http.Handler) http.Handler {
 
 ---
 
-### 4. Rate Limiting
+### 4. Rate Limiting ✅
 
 **Issue:** No rate limiting allows DoS via challenge flooding.
 
-**Fix:** Add rate limiting middleware:
+**Status:** ✅ Implemented in AgentAuth service.
 
-```yaml
-# helm values
-agentauth:
-  rateLimit:
-    enabled: true
-    challengesPerMinutePerAgent: 10
-    challengesPerMinutePerIP: 100
-    approvalsPerMinutePerApprover: 50
+**Configuration:**
+```bash
+# Environment variables (defaults shown)
+RATE_LIMIT_PER_IP=100      # requests per minute per IP
+RATE_LIMIT_PER_AGENT=20    # requests per minute per agent SPIFFE ID
+```
+
+**Features:**
+- Per-IP rate limiting (default: 100/min)
+- Per-agent SPIFFE ID rate limiting (default: 20/min)
+- Returns HTTP 429 Too Many Requests with Retry-After header
+- Automatic cleanup of expired rate limit entries
+
+**Verification:**
+```bash
+# Flood test - should see 429 responses after limit exceeded
+for i in $(seq 1 30); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -X POST http://localhost:8444/v1/challenge \
+    -H "Content-Type: application/json" \
+    -d '{"agent_spiffe_id":"spiffe://test/agent/flood","act":"test","con":{},"leg":{"basis":"test","jurisdiction":"US","accountable_party":{"type":"human","id":"x"}}}'
+done
 ```
 
 ---
 
 ## 🟠 High Priority
 
-### 5. Dual Control Enforcement
+### 5. Dual Control Enforcement ✅
 
-**Verify:**
-- [ ] Same approver cannot approve twice
-- [ ] Approver IDs are normalized (case-insensitive)
-- [ ] Approver != Requestor/Agent owner
+**Status:** ✅ Implemented with the following protections:
 
+- [x] Same approver cannot approve twice
+- [x] Approver IDs are normalized (case-insensitive)
+- [x] Self-approval prevention (approver != accountable party)
+
+**Configuration:**
 ```bash
-# Test: Same approver twice should fail
-curl -X POST /v1/approve -d '{"challenge_id":"X","approver":"admin@co.com"}'
-curl -X POST /v1/approve -d '{"challenge_id":"X","approver":"admin@co.com"}'
-# Second call should return 409 Conflict
+# Disable self-approval prevention (NOT recommended)
+ALLOW_SELF_APPROVAL=true
 ```
 
----
+**Verification:**
 
-### 6. SPIFFE ID Validation
+### 6. SPIFFE ID Validation ✅
 
-**Required Checks:**
-- [ ] Validate SPIFFE URI format strictly
-- [ ] Reject path traversal attempts (`..`)
-- [ ] Reject special characters
-- [ ] Enforce maximum length (2048 chars)
+**Status:** ✅ Implemented with strict validation.
 
+**Checks Performed:**
+- [x] Validate SPIFFE URI format strictly (regex)
+- [x] Reject path traversal attempts (`..`)
+- [x] Reject command injection characters (`$`, backticks, etc.)
+- [x] Reject null bytes and control characters
+- [x] Enforce maximum length (2048 chars)
+
+**Validation Regex:**
 ```go
-var validSPIFFE = regexp.MustCompile(`^spiffe://[a-z0-9.-]+/[a-z0-9/_-]+$`)
+var validSPIFFE = regexp.MustCompile(`^spiffe://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(/[a-zA-Z0-9._-]+)+$`)
+```
 
-func validateSPIFFEID(id string) error {
-    if len(id) > 2048 {
-        return errors.New("SPIFFE ID too long")
-    }
-    if strings.Contains(id, "..") {
-        return errors.New("path traversal not allowed")
-    }
-    if !validSPIFFE.MatchString(id) {
-        return errors.New("invalid SPIFFE ID format")
-    }
-    return nil
-}
+**Verification:**
+```bash
+# Path traversal - should return 400
+curl -X POST http://localhost:8444/v1/challenge \
+  -H "Content-Type: application/json" \
+  -d '{"agent_spiffe_id":"spiffe://test/../../../etc/passwd","act":"test","con":{},"leg":{"basis":"test","jurisdiction":"US","accountable_party":{"type":"human","id":"x"}}}'
+# Expected: "invalid agent_spiffe_id: SPIFFE ID contains path traversal"
+
+# Command injection - should return 400
+curl -X POST http://localhost:8444/v1/challenge \
+  -H "Content-Type: application/json" \
+  -d '{"agent_spiffe_id":"spiffe://test/$(whoami)","act":"test","con":{},"leg":{"basis":"test","jurisdiction":"US","accountable_party":{"type":"human","id":"x"}}}'
+# Expected: "invalid agent_spiffe_id: invalid SPIFFE ID format"
 ```
 
 ---
@@ -213,18 +242,26 @@ agentauth:
 
 ## 🔵 Recommended
 
-### 11. Security Headers
+### 11. Security Headers ✅
 
-```go
-func SecurityHeaders(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("X-Content-Type-Options", "nosniff")
-        w.Header().Set("X-Frame-Options", "DENY")
-        w.Header().Set("Cache-Control", "no-store")
-        w.Header().Set("Content-Security-Policy", "default-src 'none'")
-        next.ServeHTTP(w, r)
-    })
-}
+**Status:** ✅ Implemented in AgentAuth service.
+
+All responses include security headers:
+
+```
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+X-Xss-Protection: 1; mode=block
+Cache-Control: no-store, no-cache, must-revalidate
+```
+
+**Verification:**
+```bash
+curl -sI http://localhost:8444/health | grep -E '^X-'
+# Expected:
+# X-Content-Type-Options: nosniff
+# X-Frame-Options: DENY
+# X-Xss-Protection: 1; mode=block
 ```
 
 ---
