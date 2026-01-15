@@ -16,9 +16,9 @@ The gateways emit one JSON audit event per decision (allow/deny/error) to stdout
 
 ATB emits audit events from two services:
 
-| Service | Events | Purpose |
-|---------|--------|---------|
-| **Broker** | Request decisions | Tracks allow/deny for proxied requests |
+| Service       | Events               | Purpose                                      |
+| ------------- | -------------------- | -------------------------------------------- |
+| **Broker**    | Request decisions    | Tracks allow/deny for proxied requests       |
 | **AgentAuth** | Authorization events | Tracks challenges, approvals, token issuance |
 
 ---
@@ -29,27 +29,27 @@ Canonical JSON Schema: [schemas/audit-event.schema.json](../schemas/audit-event.
 
 ### Required Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `ts` | string | RFC3339 UTC timestamp |
+| Field            | Type   | Description                       |
+| ---------------- | ------ | --------------------------------- |
+| `ts`             | string | RFC3339 UTC timestamp             |
 | `agent_identity` | string | SPIFFE ID of the requesting agent |
-| `decision` | enum | `allow`, `deny`, or `error` |
-| `reason` | string | Machine-readable reason code |
-| `target_service` | string | Upstream service URL |
-| `method` | string | HTTP method (GET, POST, etc.) |
-| `path` | string | Request path |
+| `decision`       | enum   | `allow`, `deny`, or `error`       |
+| `reason`         | string | Machine-readable reason code      |
+| `target_service` | string | Upstream service URL              |
+| `method`         | string | HTTP method (GET, POST, etc.)     |
+| `path`           | string | Request path                      |
 
 ### Optional Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `request_id` | string | Unique request correlation ID |
-| `poa_jti` | string | PoA token ID (for allowed requests) |
-| `action` | string | Authorized action (e.g., `sap.vendor.change`) |
+| Field         | Type   | Description                                   |
+| ------------- | ------ | --------------------------------------------- |
+| `request_id`  | string | Unique request correlation ID                 |
+| `poa_jti`     | string | PoA token ID (for allowed requests)           |
+| `action`      | string | Authorized action (e.g., `sap.vendor.change`) |
 | `constraints` | object | Action constraints (e.g., `{"amount": 1000}`) |
-| `approvers` | array | List of approver IDs who authorized |
-| `legal_basis` | object | Legal basis for data processing |
-| `latency_ms` | number | Request processing time |
+| `approvers`   | array  | List of approver IDs who authorized           |
+| `legal_basis` | object | Legal basis for data processing               |
+| `latency_ms`  | number | Request processing time                       |
 
 ---
 
@@ -80,7 +80,7 @@ Canonical JSON Schema: [schemas/audit-event.schema.json](../schemas/audit-event.
   "decision": "deny",
   "reason": "insufficient_approvals",
   "action": "payment.execute",
-  "constraints": {"amount": 50000},
+  "constraints": { "amount": 50000 },
   "target_service": "http://upstream:9000",
   "method": "POST",
   "path": "/payments/execute"
@@ -154,33 +154,33 @@ AgentAuth emits structured audit events for authorization operations. These even
 
 ### AgentAuth Event Schema
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `timestamp` | string | RFC3339 UTC timestamp |
-| `event_type` | string | Event category (see below) |
-| `request_id` | string | Unique request correlation ID |
-| `agent_spiffe_id` | string | SPIFFE ID of the requesting agent |
-| `action` | string | Action being authorized |
-| `risk_tier` | string | `low`, `medium`, or `high` |
-| `approver_id` | string | Approver identity (for approval events) |
-| `challenge_id` | string | Challenge ID (for approval flow) |
-| `success` | boolean | Whether the operation succeeded |
-| `error` | string | Error message (on failure) |
-| `source_ip` | string | Client IP address |
-| `user_agent` | string | Client user agent |
-| `duration_ms` | number | Processing time in milliseconds |
+| Field             | Type    | Description                             |
+| ----------------- | ------- | --------------------------------------- |
+| `timestamp`       | string  | RFC3339 UTC timestamp                   |
+| `event_type`      | string  | Event category (see below)              |
+| `request_id`      | string  | Unique request correlation ID           |
+| `agent_spiffe_id` | string  | SPIFFE ID of the requesting agent       |
+| `action`          | string  | Action being authorized                 |
+| `risk_tier`       | string  | `low`, `medium`, or `high`              |
+| `approver_id`     | string  | Approver identity (for approval events) |
+| `challenge_id`    | string  | Challenge ID (for approval flow)        |
+| `success`         | boolean | Whether the operation succeeded         |
+| `error`           | string  | Error message (on failure)              |
+| `source_ip`       | string  | Client IP address                       |
+| `user_agent`      | string  | Client user agent                       |
+| `duration_ms`     | number  | Processing time in milliseconds         |
 
 ### AgentAuth Event Types
 
-| Event Type | Description |
-|------------|-------------|
-| `challenge_created` | New approval challenge created |
-| `approval_submitted` | Approver submitted approval |
-| `approval_rejected` | Approver rejected request |
-| `poa_issued` | PoA token successfully issued |
-| `auth_failed` | Authentication failed |
-| `rate_limited` | Request rate limited |
-| `validation_failed` | Input validation failed |
+| Event Type           | Description                    |
+| -------------------- | ------------------------------ |
+| `challenge_created`  | New approval challenge created |
+| `approval_submitted` | Approver submitted approval    |
+| `approval_rejected`  | Approver rejected request      |
+| `poa_issued`         | PoA token successfully issued  |
+| `auth_failed`        | Authentication failed          |
+| `rate_limited`       | Request rate limited           |
+| `validation_failed`  | Input validation failed        |
 
 ### Challenge Created
 
@@ -282,21 +282,21 @@ AgentAuth emits structured audit events for authorization operations. These even
 
 ## Reason Codes
 
-| Code | Decision | Description |
-|------|----------|-------------|
-| `policy_allow` | allow | Request authorized by policy |
-| `missing_poa` | deny | No PoA token provided |
-| `invalid_poa_signature` | deny | PoA signature validation failed |
-| `token_expired` | deny | PoA token has expired |
-| `token_not_yet_valid` | deny | PoA `nbf` is in the future |
-| `token_already_used` | deny | Token JTI was already seen |
-| `action_not_allowed` | deny | Action not permitted for this agent |
-| `constraint_violation` | deny | Constraint limits exceeded |
-| `insufficient_approvals` | deny | Required approvals not met |
-| `legal_basis_missing` | deny | No legal basis provided |
-| `upstream_error` | error | Upstream returned an error |
-| `upstream_timeout` | error | Upstream request timed out |
-| `internal_error` | error | Broker internal error |
+| Code                     | Decision | Description                         |
+| ------------------------ | -------- | ----------------------------------- |
+| `policy_allow`           | allow    | Request authorized by policy        |
+| `missing_poa`            | deny     | No PoA token provided               |
+| `invalid_poa_signature`  | deny     | PoA signature validation failed     |
+| `token_expired`          | deny     | PoA token has expired               |
+| `token_not_yet_valid`    | deny     | PoA `nbf` is in the future          |
+| `token_already_used`     | deny     | Token JTI was already seen          |
+| `action_not_allowed`     | deny     | Action not permitted for this agent |
+| `constraint_violation`   | deny     | Constraint limits exceeded          |
+| `insufficient_approvals` | deny     | Required approvals not met          |
+| `legal_basis_missing`    | deny     | No legal basis provided             |
+| `upstream_error`         | error    | Upstream returned an error          |
+| `upstream_timeout`       | error    | Upstream request timed out          |
+| `internal_error`         | error    | Broker internal error               |
 
 ---
 
@@ -354,7 +354,7 @@ data:
         @type json
       </parse>
     </source>
-    
+
     <match atb.audit>
       @type splunk_hec
       host splunk.example.com
@@ -369,27 +369,27 @@ data:
 ```yaml
 # Logstash pipeline
 input {
-  file {
-    path => "/var/log/atb/*.jsonl"
-    codec => json
-  }
+file {
+path => "/var/log/atb/*.jsonl"
+codec => json
+}
 }
 
 filter {
-  date {
-    match => ["ts", "ISO8601"]
-    target => "@timestamp"
-  }
-  mutate {
-    add_field => { "index_prefix" => "atb-audit" }
-  }
+date {
+match => ["ts", "ISO8601"]
+target => "@timestamp"
+}
+mutate {
+add_field => { "index_prefix" => "atb-audit" }
+}
 }
 
 output {
-  elasticsearch {
-    hosts => ["https://es.example.com:9200"]
-    index => "%{index_prefix}-%{+YYYY.MM.dd}"
-  }
+elasticsearch {
+hosts => ["https://es.example.com:9200"]
+index => "%{index_prefix}-%{+YYYY.MM.dd}"
+}
 }
 ```
 
@@ -455,15 +455,16 @@ kubectl logs -n atb -l app=atb-broker --since=1h | \
 
 ### Retention Policy
 
-| Environment | Retention | Rationale |
-|-------------|-----------|-----------|
-| Development | 7 days | Debugging only |
-| Staging | 30 days | Pre-production testing |
-| Production | 7 years | SOX/GDPR compliance |
+| Environment | Retention | Rationale              |
+| ----------- | --------- | ---------------------- |
+| Development | 7 days    | Debugging only         |
+| Staging     | 30 days   | Pre-production testing |
+| Production  | 7 years   | SOX/GDPR compliance    |
 
 ### Immutability
 
 Audit events should be stored in write-once storage:
+
 - AWS S3 with Object Lock
 - Azure Blob with Immutable Storage
 - GCS with Retention Policies
@@ -471,6 +472,7 @@ Audit events should be stored in write-once storage:
 ### Chain of Custody
 
 For legal proceedings, maintain:
+
 1. **Hash chain**: Each event includes hash of previous
 2. **Timestamps**: Cryptographic timestamps (RFC 3161)
 3. **Signatures**: Events signed with HSM-backed keys

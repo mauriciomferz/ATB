@@ -6,9 +6,11 @@ This module provides structured data types for:
 - Approval workflows
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from enum import Enum
 
 
@@ -36,9 +38,9 @@ class AccountableParty:
     type: PartyType
     id: str
     name: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API requests."""
         result = {
             "type": self.type.value if isinstance(self.type, PartyType) else self.type,
@@ -57,9 +59,9 @@ class DualControl:
 
     required: bool = False
     min_approvers: int = 2
-    approver_roles: List[str] = field(default_factory=list)
+    approver_roles: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API requests."""
         return {
             "required": self.required,
@@ -81,9 +83,9 @@ class ActionLeg:
     dual_control: Optional[DualControl] = None
     purpose: Optional[str] = None
     retention_days: Optional[int] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API requests."""
         result = {
             "basis": self.basis,
@@ -111,10 +113,10 @@ class PoARequest:
 
     agent_spiffe_id: str
     act: str  # Action identifier, e.g., "crm.contact.read"
-    con: Dict[str, Any]  # Constraints, e.g., {"contact_id": "123"}
+    con: dict[str, Any]  # Constraints, e.g., {"contact_id": "123"}
     leg: ActionLeg  # Legal basis
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API requests."""
         return {
             "agent_spiffe_id": self.agent_spiffe_id,
@@ -135,7 +137,7 @@ class ChallengeResponse:
     approval_hint: str = ""
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ChallengeResponse":
+    def from_dict(cls, data: dict[str, Any]) -> ChallengeResponse:
         """Create from API response dictionary."""
         expires_at = data.get("expires_at", "")
         if isinstance(expires_at, str):
@@ -159,7 +161,7 @@ class ApprovalRequest:
     approver: str
     approval_token: Optional[str] = None  # JWT for authenticated approvals
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API requests."""
         return {
             "challenge_id": self.challenge_id,
@@ -175,7 +177,7 @@ class Approver:
     approved_at: datetime
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Approver":
+    def from_dict(cls, data: dict[str, Any]) -> Approver:
         """Create from API response dictionary."""
         approved_at = data.get("approved_at", "")
         if isinstance(approved_at, str):
@@ -195,10 +197,10 @@ class ApprovalResponse:
     approvers_count: int
     approvers_needed: int
     fully_approved: bool
-    approvers: List[Approver] = field(default_factory=list)
+    approvers: list[Approver] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ApprovalResponse":
+    def from_dict(cls, data: dict[str, Any]) -> ApprovalResponse:
         """Create from API response dictionary."""
         approvers = [Approver.from_dict(a) for a in data.get("approvers", [])]
         return cls(
@@ -216,7 +218,7 @@ class MandateRequest:
 
     challenge_id: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API requests."""
         return {
             "challenge_id": self.challenge_id,
@@ -232,7 +234,7 @@ class MandateResponse:
     token_id: str = ""
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MandateResponse":
+    def from_dict(cls, data: dict[str, Any]) -> MandateResponse:
         """Create from API response dictionary."""
         expires_at = data.get("expires_at", "")
         if isinstance(expires_at, str):
@@ -258,11 +260,11 @@ class ChallengeStatus:
     requires_dual_control: bool
     approvers_needed: int
     approvers_count: int
-    approvers: List[Approver]
+    approvers: list[Approver]
     fully_approved: bool
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ChallengeStatus":
+    def from_dict(cls, data: dict[str, Any]) -> ChallengeStatus:
         """Create from API response dictionary."""
         created_at = data.get("created_at", "")
         expires_at = data.get("expires_at", "")
