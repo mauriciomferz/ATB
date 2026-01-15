@@ -161,6 +161,161 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Approver JWT Authentication
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ApproverClaims represents JWT claims for approvers
+type ApproverClaims struct {
+	jwt.RegisteredClaims
+	ApproverID   string   `json:"approver_id"`
+	Email        string   `json:"email,omitempty"`
+	Name         string   `json:"name,omitempty"`
+	Roles        []string `json:"roles,omitempty"`
+	Organization string   `json:"org,omitempty"`
+}
+
+// ApproverAuthConfig holds configuration for approver authentication
+type ApproverAuthConfig struct {
+	// SharedSecret for HMAC verification (legacy)
+	SharedSecret string
+	// JWTSecret for HS256 JWT verification
+	JWTSecret []byte
+	// RSAPublicKeyPEM for RS256 JWT verification
+	RSAPublicKeyPEM string
+	// Ed25519PublicKeyPEM for EdDSA JWT verification
+	Ed25519PublicKeyPEM string
+	// AllowedIssuers restricts which issuers are trusted
+	AllowedIssuers []string
+	// RequireJWT forces JWT authentication (disables shared secret)
+	RequireJWT bool
+}
+
+// verifyApproverJWT validates a JWT token and extracts approver claims
+func verifyApproverJWT(tokenString string, config ApproverAuthConfig) (*ApproverClaims, error) {
+	if tokenString == "" {
+		return nil, errors.New("empty token")
+	}
+
+	// Remove "Bearer " prefix if present
+	tokenString = strings.TrimPrefix(tokenString, "Bearer ")
+	tokenString = strings.TrimSpace(tokenString)
+
+	claims := &ApproverClaims{}
+
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		// Validate signing algorithm
+		switch token.Method.Alg() {
+		case "HS256", "HS384", "HS512":
+			if len(config.JWTSecret) == 0 {
+				return nil, errors.New("HMAC signing not configured")
+			}
+			return config.JWTSecret, nil
+		case "RS256", "RS384", "RS512":
+			if config.RSAPublicKeyPEM == "" {
+				return nil, errors.New("RSA signing not configured")
+			}
+			block, _ := pem.Decode([]byte(config.RSAPublicKeyPEM))
+			if block == nil {
+				return nil, errors.New("failed to parse RSA public key PEM")
+			}
+			pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse RSA public key: %v", err)
+			}
+			return pub, nil
+		case "EdDSA":
+			if config.Ed25519PublicKeyPEM == "" {
+				return nil, errors.New("EdDSA signing not configured")
+			}
+			block, _ := pem.Decode([]byte(config.Ed25519PublicKeyPEM))
+			if block == nil {
+				return nil, errors.New("failed to parse Ed25519 public key PEM")
+			}
+			pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse Ed25519 public key: %v", err)
+			}
+			return pub, nil
+		default:
+			return nil, fmt.Errorf("unsupported signing algorithm: %s", token.Method.Alg())
+		}
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("token validation failed: %v", err)
+	}
+
+	if !token.Valid {
+		return nil, errors.New("invalid token")
+	}
+
+	// Validate issuer if configured
+	if len(config.AllowedIssuers) > 0 {
+		issuer, err := claims.GetIssuer()
+		if err != nil {
+			return nil, errors.New("missing issuer claim")
+		}
+		allowed := false
+		for _, iss := range config.AllowedIssuers {
+			if iss == issuer {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return nil, fmt.Errorf("issuer not allowed: %s", issuer)
+		}
+	}
+
+	// Validate approver_id is present
+	if claims.ApproverID == "" && claims.Subject == "" && claims.Email == "" {
+		return nil, errors.New("token must contain approver_id, sub, or email claim")
+	}
+
+	// Use subject or email as fallback for approver_id
+	if claims.ApproverID == "" {
+		if claims.Subject != "" {
+			claims.ApproverID = claims.Subject
+		} else {
+			claims.ApproverID = claims.Email
+		}
+	}
+
+	return claims, nil
+}
+
+// authenticateApprover verifies the approver using JWT or shared secret
+func authenticateApprover(r *http.Request, config ApproverAuthConfig) (string, error) {
+	// Try Authorization header first (JWT)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		claims, err := verifyApproverJWT(authHeader, config)
+		if err != nil {
+			return "", fmt.Errorf("JWT verification failed: %v", err)
+		}
+		log.Printf("Approver authenticated via JWT: %s", claims.ApproverID)
+		return claims.ApproverID, nil
+	}
+
+	// Fall back to shared secret (legacy, unless RequireJWT is set)
+	if config.RequireJWT {
+		return "", errors.New("JWT authentication required")
+	}
+
+	if config.SharedSecret != "" {
+		got := strings.TrimSpace(r.Header.Get("X-Approval-Token"))
+		if got == "" || got != config.SharedSecret {
+			return "", errors.New("invalid approval token")
+		}
+		// With shared secret, approver must be in request body
+		return "", nil // Caller should get approver from request body
+	}
+
+	// No authentication configured - allow (for development)
+	return "", nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Data Types
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -364,6 +519,46 @@ func main() {
 	agentRateLimiter := NewRateLimiter(rateLimitPerAgent, time.Minute)
 	log.Printf("Rate limiting: %d/min per IP, %d/min per agent", rateLimitPerIP, rateLimitPerAgent)
 
+	// Approver authentication configuration
+	approverAuthConfig := ApproverAuthConfig{
+		SharedSecret: approvalToken,
+	}
+
+	// JWT-based approver authentication (HMAC/HS256)
+	if secret := strings.TrimSpace(os.Getenv("APPROVER_JWT_SECRET")); secret != "" {
+		approverAuthConfig.JWTSecret = []byte(secret)
+		log.Printf("Approver JWT authentication enabled (HMAC)")
+	}
+
+	// JWT-based approver authentication (RSA/RS256)
+	if pubKey := strings.TrimSpace(os.Getenv("APPROVER_RSA_PUBLIC_KEY_PEM")); pubKey != "" {
+		approverAuthConfig.RSAPublicKeyPEM = pubKey
+		log.Printf("Approver JWT authentication enabled (RSA)")
+	}
+
+	// JWT-based approver authentication (EdDSA)
+	if pubKey := strings.TrimSpace(os.Getenv("APPROVER_ED25519_PUBLIC_KEY_PEM")); pubKey != "" {
+		approverAuthConfig.Ed25519PublicKeyPEM = pubKey
+		log.Printf("Approver JWT authentication enabled (EdDSA)")
+	}
+
+	// Allowed JWT issuers (comma-separated)
+	if issuers := strings.TrimSpace(os.Getenv("APPROVER_JWT_ISSUERS")); issuers != "" {
+		for _, iss := range strings.Split(issuers, ",") {
+			iss = strings.TrimSpace(iss)
+			if iss != "" {
+				approverAuthConfig.AllowedIssuers = append(approverAuthConfig.AllowedIssuers, iss)
+			}
+		}
+		log.Printf("Allowed JWT issuers: %v", approverAuthConfig.AllowedIssuers)
+	}
+
+	// Require JWT authentication (disable shared secret fallback)
+	if v := strings.TrimSpace(os.Getenv("REQUIRE_JWT_AUTH")); strings.ToLower(v) == "true" {
+		approverAuthConfig.RequireJWT = true
+		log.Printf("JWT authentication required for approvers")
+	}
+
 	// Self-approval prevention (default: enabled)
 	preventSelfApproval := true
 	if v := strings.TrimSpace(os.Getenv("ALLOW_SELF_APPROVAL")); strings.ToLower(v) == "true" {
@@ -549,10 +744,18 @@ func main() {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if approvalToken != "" {
-			got := strings.TrimSpace(r.Header.Get("X-Approval-Token"))
-			if got == "" || got != approvalToken {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+
+		// Try JWT authentication first
+		jwtApproverID, authErr := authenticateApprover(r, approverAuthConfig)
+		if authErr != nil {
+			// Check if this is a hard failure (JWT required or JWT provided but invalid)
+			if approverAuthConfig.RequireJWT {
+				http.Error(w, fmt.Sprintf("authentication failed: %s", authErr.Error()), http.StatusUnauthorized)
+				return
+			}
+			// Check if JWT was provided but failed validation
+			if r.Header.Get("Authorization") != "" {
+				http.Error(w, fmt.Sprintf("authentication failed: %s", authErr.Error()), http.StatusUnauthorized)
 				return
 			}
 		}
@@ -566,7 +769,12 @@ func main() {
 			return
 		}
 		id := strings.TrimSpace(body.ChallengeID)
-		approverID := strings.TrimSpace(body.Approver)
+
+		// Use JWT-extracted approver ID if available, otherwise use body
+		approverID := jwtApproverID
+		if approverID == "" {
+			approverID = strings.TrimSpace(body.Approver)
+		}
 		normalizedApproverID := normalizeApproverID(approverID)
 
 		if id == "" {

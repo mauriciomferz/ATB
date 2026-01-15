@@ -15,6 +15,20 @@ from atb.exceptions import (
     ValidationError,
 )
 from atb.poa import AccountableParty, LegalGrounding, PoA, PoABuilder
+from atb.models import (
+    ActionLeg,
+    ApprovalRequest,
+    ApprovalResponse,
+    Approver,
+    ChallengeResponse,
+    ChallengeStatus,
+    DualControl,
+    MandateRequest,
+    MandateResponse,
+    PartyType,
+    PoARequest,
+    RiskTier,
+)
 
 __version__ = "0.1.0"
 __all__ = [
@@ -28,4 +42,17 @@ __all__ = [
     "TokenExpiredError",
     "ValidationError",
     "ConnectionError",
+    # Models
+    "ActionLeg",
+    "ApprovalRequest",
+    "ApprovalResponse",
+    "Approver",
+    "ChallengeResponse",
+    "ChallengeStatus",
+    "DualControl",
+    "MandateRequest",
+    "MandateResponse",
+    "PartyType",
+    "PoARequest",
+    "RiskTier",
 ]

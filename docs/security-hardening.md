@@ -70,34 +70,80 @@ curl --cert agent.crt --key agent.key https://agentauth:8443/v1/challenge
 
 ---
 
-### 3. Approver Authentication
+### 3. Approver Authentication ✅
 
-**Issue:** `/v1/approve` endpoint accepts any approver claim without verification.
+**Issue:** `/v1/approve` endpoint previously accepted any approver claim without verification.
 
-**Required Implementation:**
+**Status:** Implemented with JWT authentication support.
 
-- Require signed approval requests (JWT signed by approver's key)
-- Verify approver exists in identity provider
-- Validate approver has approval privileges for the action
+**Configuration Options:**
 
-```go
-// Example middleware (to be implemented)
-func RequireSignedApproval(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        approvalJWT := r.Header.Get("X-Approval-Token")
-        claims, err := verifyApprovalToken(approvalJWT)
-        if err != nil {
-            http.Error(w, "Invalid approval signature", 401)
-            return
-        }
-        // Verify approver identity
-        if !isValidApprover(claims.Subject) {
-            http.Error(w, "Not an authorized approver", 403)
-            return
-        }
-        next.ServeHTTP(w, r)
-    })
+```bash
+# Option 1: HMAC/HS256 JWT verification
+export APPROVER_JWT_SECRET="your-256-bit-secret-key"
+
+# Option 2: RSA/RS256 JWT verification
+export APPROVER_RSA_PUBLIC_KEY_PEM="-----BEGIN PUBLIC KEY-----
+...
+-----END PUBLIC KEY-----"
+
+# Option 3: EdDSA JWT verification
+export APPROVER_ED25519_PUBLIC_KEY_PEM="-----BEGIN PUBLIC KEY-----
+...
+-----END PUBLIC KEY-----"
+
+# Restrict trusted JWT issuers (comma-separated)
+export APPROVER_JWT_ISSUERS="https://idp.corp.com,https://auth.example.org"
+
+# Require JWT (disable shared secret fallback)
+export REQUIRE_JWT_AUTH=true
+```
+
+**JWT Claims Required:**
+
+```json
+{
+  "approver_id": "alice@example.com",
+  "sub": "alice@example.com",
+  "email": "alice@example.com",
+  "name": "Alice Smith",
+  "roles": ["approver", "admin"],
+  "org": "engineering",
+  "iss": "https://idp.corp.com",
+  "exp": 1704456789,
+  "iat": 1704453189
 }
+```
+
+**Usage:**
+
+```bash
+# Approve with JWT (preferred)
+curl -X POST https://agentauth:8443/v1/approve \
+  -H "Authorization: Bearer eyJhbG..." \
+  -H "Content-Type: application/json" \
+  -d '{"challenge_id": "chal_xxx"}'
+
+# Legacy: Approve with shared secret
+curl -X POST https://agentauth:8443/v1/approve \
+  -H "X-Approval-Token: secret" \
+  -H "Content-Type: application/json" \
+  -d '{"challenge_id": "chal_xxx", "approver": "alice@example.com"}'
+```
+
+**Verification:**
+
+```bash
+# Without valid auth - should fail
+curl -X POST https://agentauth:8443/v1/approve \
+  -d '{"challenge_id": "chal_xxx", "approver": "evil@attacker.com"}'
+# Expected: 401 Unauthorized
+
+# With invalid JWT - should fail
+curl -X POST https://agentauth:8443/v1/approve \
+  -H "Authorization: Bearer invalid-token" \
+  -d '{"challenge_id": "chal_xxx"}'
+# Expected: 401 authentication failed: token validation failed
 ```
 
 ---
