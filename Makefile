@@ -172,8 +172,8 @@ lint: lint-opa lint-go
 
 lint-opa:
 	@echo "🔍 Checking OPA policy syntax..."
-	opa check $(OPA_DIR)/
-	opa fmt --diff $(OPA_DIR)/*.rego
+	opa check --v0-compatible $(OPA_DIR)/
+	opa fmt --v0-compatible --diff $(OPA_DIR)/*.rego
 
 lint-go:
 	@echo "🔍 Running Go linters..."
@@ -183,7 +183,7 @@ lint-go:
 fmt:
 	@echo "🎨 Formatting code..."
 	cd $(GO_DIR) && go fmt ./...
-	opa fmt -w $(OPA_DIR)/*.rego
+	opa fmt --v0-compatible -w $(OPA_DIR)/*.rego
 
 check: lint test
 	@echo "✅ All checks passed!"
@@ -195,7 +195,7 @@ check: lint test
 run-opa:
 	@echo "🚀 Starting OPA server on http://localhost:8181..."
 	@echo "   Decision endpoint: http://localhost:8181/v1/data/atb/poa/decision"
-	opa run --server --addr 127.0.0.1:8181 $(OPA_DIR)/poa.rego
+	opa run --server --v0-compatible --addr 127.0.0.1:8181 $(OPA_DIR)/poa.rego
 
 run-upstream:
 	@echo "🚀 Starting upstream echo server on http://localhost:9000..."
