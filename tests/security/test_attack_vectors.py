@@ -48,10 +48,10 @@ class TestApproverSecurity:
     def test_approver_identity_should_be_verified(self):
         """
         VULNERABILITY: Approver identity is not verified.
-        
+
         Current behavior: Anyone can claim to be any approver.
         Expected behavior: Approver must authenticate (mTLS/JWT).
-        
+
         Status: KNOWN VULNERABILITY - needs fix
         """
         with httpx.Client() as client:
@@ -105,10 +105,10 @@ class TestApproverSecurity:
                     },
                     timeout=5.0,
                 )
-                
+
                 if resp.status_code != 200:
                     pytest.skip("Could not create challenge")
-                
+
                 challenge_id = resp.json().get("challenge_id")
 
                 # Try to approve as the same person who made the request
@@ -122,9 +122,9 @@ class TestApproverSecurity:
                 )
 
                 # Self-approval should be rejected with 403 Forbidden
-                assert resp.status_code == 403, (
-                    f"Self-approval should be rejected (got {resp.status_code})"
-                )
+                assert (
+                    resp.status_code == 403
+                ), f"Self-approval should be rejected (got {resp.status_code})"
 
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
@@ -147,7 +147,10 @@ class TestDualControlBypass:
                         "leg": {
                             "basis": "contract",
                             "jurisdiction": "US",
-                            "accountable_party": {"type": "human", "id": "test@test.com"},
+                            "accountable_party": {
+                                "type": "human",
+                                "id": "test@test.com",
+                            },
                         },
                     },
                     timeout=5.0,
@@ -179,9 +182,10 @@ class TestDualControlBypass:
                 )
 
                 # Second approval should be rejected
-                assert resp2.status_code in [400, 409], (
-                    "Duplicate approver should be rejected"
-                )
+                assert resp2.status_code in [
+                    400,
+                    409,
+                ], "Duplicate approver should be rejected"
 
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
@@ -190,9 +194,7 @@ class TestDualControlBypass:
         """Case variations of same approver should be detected."""
         with httpx.Client() as client:
             try:
-                challenge_id = create_challenge(
-                    client, action="sap.vendor.change"
-                )
+                challenge_id = create_challenge(client, action="sap.vendor.change")
                 if not challenge_id:
                     pytest.skip("Could not create challenge")
 
@@ -217,9 +219,9 @@ class TestDualControlBypass:
                 )
 
                 # Should detect as same approver with 409 Conflict
-                assert resp.status_code == 409, (
-                    f"Case variation should be detected as duplicate (got {resp.status_code})"
-                )
+                assert (
+                    resp.status_code == 409
+                ), f"Case variation should be detected as duplicate (got {resp.status_code})"
 
             except httpx.ConnectError:
                 pytest.skip("AgentAuth not running")
@@ -231,7 +233,7 @@ class TestRateLimiting:
     def test_challenge_flood_mitigated(self):
         """
         Rapid challenge creation should be rate limited per agent.
-        
+
         Uses same agent ID to trigger per-agent rate limit (default: 20/min).
         """
         with httpx.Client() as client:
@@ -277,7 +279,7 @@ class TestRateLimiting:
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
                 futures = []
-                
+
                 # Use 150 requests to exceed IP rate limit (100/min)
                 for i in range(150):
                     futures.append(
@@ -425,16 +427,16 @@ class TestTokenSecurity:
                     # Tamper with the payload
                     import base64
                     import json
-                    
-                    payload = json.loads(
-                        base64.urlsafe_b64decode(parts[1] + "==")
-                    )
+
+                    payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=="))
                     payload["act"] = "admin.system.delete"  # Escalate action
-                    
-                    tampered_payload = base64.urlsafe_b64encode(
-                        json.dumps(payload).encode()
-                    ).decode().rstrip("=")
-                    
+
+                    tampered_payload = (
+                        base64.urlsafe_b64encode(json.dumps(payload).encode())
+                        .decode()
+                        .rstrip("=")
+                    )
+
                     tampered_token = f"{parts[0]}.{tampered_payload}.{parts[2]}"
 
                     # OPA should reject tampered token
@@ -442,7 +444,9 @@ class TestTokenSecurity:
                         f"{OPA_URL}/v1/data/atb/poa/decision",
                         json={
                             "input": {
-                                "agent": {"spiffe_id": "spiffe://example.org/agent/test"},
+                                "agent": {
+                                    "spiffe_id": "spiffe://example.org/agent/test"
+                                },
                                 "poa": {},  # Would need to parse tampered token
                                 "request": {"action": "admin.system.delete"},
                             }

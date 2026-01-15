@@ -238,9 +238,9 @@ curl -X POST http://localhost:8444/v1/challenge \
 ```yaml
 agentauth:
   challenge:
-    defaultTTL: 300      # 5 minutes
-    maxTTL: 900          # 15 minutes max
-    cleanupInterval: 60  # Cleanup expired every minute
+    defaultTTL: 300 # 5 minutes
+    maxTTL: 900 # 15 minutes max
+    cleanupInterval: 60 # Cleanup expired every minute
 ```
 
 ---
