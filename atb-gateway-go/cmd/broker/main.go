@@ -1181,7 +1181,8 @@ func (c *Connector) RateLimitAllowed() bool {
 
 func (c *Connector) ValidateRequest(path string) *ConnectorError {
 	if !c.EgressAllowed(path) {
-		return &ConnectorError{Code: "egress_denied", Message: fmt.Sprintf("path %q not in egress allowlist for connector %q", path, c.ID)}
+		msg := fmt.Sprintf("path %q not in egress allowlist for connector %q", path, c.ID)
+		return &ConnectorError{Code: "egress_denied", Message: msg}
 	}
 	if !c.RateLimitAllowed() {
 		return &ConnectorError{Code: "rate_limited", Message: fmt.Sprintf("rate limit exceeded for connector %q", c.ID)}
@@ -1477,7 +1478,12 @@ type platformVerifier struct {
 	requirePlatID bool
 }
 
-func newPlatformVerifier(jwksURL, issuer, audience string, httpClient *http.Client, cacheTTL time.Duration, required bool) *platformVerifier {
+func newPlatformVerifier(
+	jwksURL, issuer, audience string,
+	httpClient *http.Client,
+	cacheTTL time.Duration,
+	required bool,
+) *platformVerifier {
 	if strings.TrimSpace(jwksURL) == "" {
 		return &platformVerifier{requirePlatID: required}
 	}
@@ -1947,8 +1953,10 @@ func main() {
 	immutableStorageBackend := strings.TrimSpace(os.Getenv("AUDIT_IMMUTABLE_BACKEND")) // "azure", "s3", or "http"
 	if immutableStorageURL != "" {
 		retentionDays := int(envInt64("AUDIT_RETENTION_DAYS", 2555)) // ~7 years default
-		immutableSink := newImmutableStorageSink(immutableStorageBackend, immutableStorageURL, immutableStorageAuth, retentionDays)
-		log.Printf("Immutable audit storage configured: backend=%s url=%s retention=%d days", immutableStorageBackend, immutableStorageURL, retentionDays)
+		immutableSink := newImmutableStorageSink(
+			immutableStorageBackend, immutableStorageURL, immutableStorageAuth, retentionDays)
+		log.Printf("Immutable audit storage configured: backend=%s url=%s retention=%d days",
+			immutableStorageBackend, immutableStorageURL, retentionDays)
 		defer immutableSink.Close()
 
 		// If we already have an audit sink (HTTP), wrap both in MultiSink
@@ -2062,7 +2070,9 @@ func main() {
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	httpClient := &http.Client{Timeout: 1500 * time.Millisecond}
 
-	platVerifier := newPlatformVerifier(platJWKSURL, platIssuer, platAudience, httpClient, time.Duration(platCacheSec)*time.Second, platRequired)
+	platVerifier := newPlatformVerifier(
+		platJWKSURL, platIssuer, platAudience, httpClient,
+		time.Duration(platCacheSec)*time.Second, platRequired)
 
 	opa := &OPAClient{URL: opaURL, HTTP: httpClient}
 	keyFunc, allowedAlgs, err := loadPoAKeyFunc(httpClient)
@@ -2100,7 +2110,11 @@ func main() {
 		platToken := strings.TrimSpace(r.Header.Get("X-Platform-Token"))
 		platClaims, platErr := platVerifier.verify(r.Context(), platToken)
 		if platErr != nil {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Decision: "deny", Reason: "platform_identity_invalid:" + platErr.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+				Decision: "deny", Reason: "platform_identity_invalid:" + platErr.Error(),
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
 			http.Error(w, "invalid platform identity", http.StatusUnauthorized)
 			return
@@ -2123,7 +2137,12 @@ func main() {
 
 			// Validate Platform ↔ SPIFFE binding if configured
 			if valid, reason := ValidatePlatformSPIFFEBinding(platformID, agentSPIFFE); !valid {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Decision: "deny", Reason: "spiffe_binding_mismatch:" + reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{
+					Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+					PlatformIdentity: platformID, Decision: "deny",
+					Reason: "spiffe_binding_mismatch:" + reason,
+					Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+				})
 				brokerRequestsTotal.WithLabelValues("deny", "").Inc()
 				http.Error(w, "platform identity does not match SPIFFE identity", http.StatusForbidden)
 				return
@@ -2131,7 +2150,12 @@ func main() {
 		}
 
 		if !authConfigured {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Decision: "deny", Reason: "poa_verification_not_configured", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+				PlatformIdentity: platformID, Decision: "deny",
+				Reason: "poa_verification_not_configured",
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("deny", "").Inc()
 			http.Error(w, "authorization not configured", http.StatusServiceUnavailable)
 			return
@@ -2147,7 +2171,11 @@ func main() {
 		}
 
 		if ok, why := semanticGuardrails(r.Context(), actionForLogs, agentSPIFFE, params); !ok {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, Action: actionForLogs, Decision: "deny", Reason: why, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+				Action: actionForLogs, Decision: "deny", Reason: why,
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 			http.Error(w, "blocked by semantic firewall", http.StatusForbidden)
 			return
@@ -2159,7 +2187,12 @@ func main() {
 		}
 		if poaToken == "" {
 			if !allowUnmandatedLowRisk {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "deny", Reason: "missing_poa", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{
+					Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+					PlatformIdentity: platformID, Action: actionForLogs,
+					Decision: "deny", Reason: "missing_poa",
+					Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+				})
 				brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 				http.Error(w, "missing PoA token", http.StatusUnauthorized)
 				return
@@ -2180,19 +2213,34 @@ func main() {
 
 			allow, reason, err := opa.Decide(r.Context(), input)
 			if err != nil {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "error", Reason: "opa_error:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{
+					Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+					PlatformIdentity: platformID, Action: actionForLogs,
+					Decision: "error", Reason: "opa_error:" + err.Error(),
+					Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+				})
 				brokerRequestsTotal.WithLabelValues("error", actionForLogs).Inc()
 				http.Error(w, "policy evaluation error", http.StatusInternalServerError)
 				return
 			}
 			if !allow {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{
+					Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+					PlatformIdentity: platformID, Action: actionForLogs,
+					Decision: "deny", Reason: reason,
+					Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+				})
 				brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 				http.Error(w, "PoA required", http.StatusUnauthorized)
 				return
 			}
 
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "allow", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+				PlatformIdentity: platformID, Action: actionForLogs,
+				Decision: "allow", Reason: reason,
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("allow", actionForLogs).Inc()
 
 			// Use connector if configured, otherwise default proxy
@@ -2226,21 +2274,38 @@ func main() {
 
 		claims, err := verifyPoAJWT(poaToken, maxTTLSec, keyFunc, allowedAlgs)
 		if err != nil {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: actionForLogs, Decision: "deny", Reason: "poa_invalid:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, AgentIdentity: agentSPIFFE,
+				PlatformIdentity: platformID, Action: actionForLogs,
+				Decision: "deny", Reason: "poa_invalid:" + err.Error(),
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("deny", actionForLogs).Inc()
 			http.Error(w, "invalid PoA", http.StatusForbidden)
 			return
 		}
 
 		if claims.Subject != agentSPIFFE {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "sub_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, MandateID: claims.ID,
+				AgentIdentity: agentSPIFFE, PlatformIdentity: platformID,
+				Action: claims.Act, Constraints: claims.Con,
+				Decision: "deny", Reason: "sub_mismatch",
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "PoA subject mismatch", http.StatusForbidden)
 			return
 		}
 
 		if actionHeader != "" && actionHeader != claims.Act {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "action_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, MandateID: claims.ID,
+				AgentIdentity: agentSPIFFE, PlatformIdentity: platformID,
+				Action: claims.Act, Constraints: claims.Con,
+				Decision: "deny", Reason: "action_mismatch",
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "PoA action mismatch", http.StatusForbidden)
 			return
@@ -2253,7 +2318,13 @@ func main() {
 				violationDetails[i] = v.Message
 			}
 			reason := "constraint_violation:" + strings.Join(violationDetails, "; ")
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, MandateID: claims.ID,
+				AgentIdentity: agentSPIFFE, PlatformIdentity: platformID,
+				Action: claims.Act, Constraints: claims.Con,
+				Decision: "deny", Reason: reason,
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "PoA constraint violation: "+violationDetails[0], http.StatusForbidden)
 			return
@@ -2282,7 +2353,13 @@ func main() {
 
 		allow, reason, err := opa.Decide(r.Context(), input)
 		if err != nil {
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "error", Reason: "opa_error:" + err.Error(), Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, MandateID: claims.ID,
+				AgentIdentity: agentSPIFFE, PlatformIdentity: platformID,
+				Action: claims.Act, Constraints: claims.Con,
+				Decision: "error", Reason: "opa_error:" + err.Error(),
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("error", claims.Act).Inc()
 			http.Error(w, "policy evaluation error", http.StatusInternalServerError)
 			return
@@ -2291,7 +2368,13 @@ func main() {
 			if reason == "" {
 				reason = "policy_denied"
 			}
-			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			audit(AuditEvent{
+				Timestamp: start, RequestID: reqID, MandateID: claims.ID,
+				AgentIdentity: agentSPIFFE, PlatformIdentity: platformID,
+				Action: claims.Act, Constraints: claims.Con,
+				Decision: "deny", Reason: reason,
+				Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+			})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "policy denied", http.StatusForbidden)
 			return
@@ -2301,14 +2384,26 @@ func main() {
 			now := time.Now().UTC()
 			until := claims.ExpiresAt.Time.Add(30 * time.Second)
 			if !replay.markIfFresh(claims.ID, until, now) {
-				audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "poa_replay_detected", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+				audit(AuditEvent{
+					Timestamp: start, RequestID: reqID, MandateID: claims.ID,
+					AgentIdentity: agentSPIFFE, PlatformIdentity: platformID,
+					Action: claims.Act, Constraints: claims.Con,
+					Decision: "deny", Reason: "poa_replay_detected",
+					Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+				})
 				brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 				http.Error(w, "PoA replay detected", http.StatusForbidden)
 				return
 			}
 		}
 
-		audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "allow", Reason: "policy_allow", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+		audit(AuditEvent{
+			Timestamp: start, RequestID: reqID, MandateID: claims.ID,
+			AgentIdentity: agentSPIFFE, PlatformIdentity: platformID,
+			Action: claims.Act, Constraints: claims.Con,
+			Decision: "allow", Reason: "policy_allow",
+			Target: targetURL.String(), Method: r.Method, Path: r.URL.Path,
+		})
 		brokerRequestsTotal.WithLabelValues("allow", claims.Act).Inc()
 
 		// Resolve and validate connector if registry is configured
