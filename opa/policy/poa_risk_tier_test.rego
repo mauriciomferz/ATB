@@ -14,15 +14,15 @@ medium_risk_base := {
 			"accountable_party": {"type": "employee", "id": "emp-100"},
 			"approval": {
 				"approver_id": "manager-001",
-				"approved_at": "2024-01-15T10:00:00Z"
-			}
+				"approved_at": "2024-01-15T10:00:00Z",
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "medium-risk-001"
+		"jti": "medium-risk-001",
 	},
 	"request": {"method": "POST", "path": "/crm/contacts", "action": "crm.contact.update", "params": {}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 # Base input for a high-risk action (sap.vendor.create - no constraint-specific rules)
@@ -39,16 +39,16 @@ high_risk_base := {
 				"required": true,
 				"approvers": [
 					{"id": "approver-a", "type": "manager"},
-					{"id": "approver-b", "type": "compliance"}
-				]
-			}
+					{"id": "approver-b", "type": "compliance"},
+				],
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "high-risk-001"
+		"jti": "high-risk-001",
 	},
 	"request": {"method": "POST", "path": "/sap/vendor", "action": "sap.vendor.create", "params": {}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 # Test: medium-risk with proper approval is allowed
@@ -66,9 +66,7 @@ test_medium_risk_without_approval_denied {
 
 # Test: medium-risk with self-approval is denied
 test_medium_risk_self_approval_denied {
-	inp := json.patch(medium_risk_base, [
-		{"op": "replace", "path": "/poa/leg/approval/approver_id", "value": "spiffe://atb.example/agent/crm-agent"}
-	])
+	inp := json.patch(medium_risk_base, [{"op": "replace", "path": "/poa/leg/approval/approver_id", "value": "spiffe://atb.example/agent/crm-agent"}])
 	d := decision with input as inp
 	d.allow == false
 	d.reason == "medium_risk_approval_required"
@@ -89,9 +87,7 @@ test_high_risk_without_dual_control_denied {
 
 # Test: high-risk with only one approver is denied
 test_high_risk_single_approver_denied {
-	inp := json.patch(high_risk_base, [
-		{"op": "replace", "path": "/poa/leg/dual_control/approvers", "value": [{"id": "approver-a", "type": "manager"}]}
-	])
+	inp := json.patch(high_risk_base, [{"op": "replace", "path": "/poa/leg/dual_control/approvers", "value": [{"id": "approver-a", "type": "manager"}]}])
 	d := decision with input as inp
 	d.allow == false
 	d.reason == "high_risk_dual_control_required"
@@ -99,12 +95,10 @@ test_high_risk_single_approver_denied {
 
 # Test: high-risk with requester as approver is denied
 test_high_risk_self_approval_denied {
-	inp := json.patch(high_risk_base, [
-		{"op": "replace", "path": "/poa/leg/dual_control/approvers", "value": [
-			{"id": "spiffe://atb.example/agent/export-agent", "type": "requester"},
-			{"id": "approver-b", "type": "manager"}
-		]}
-	])
+	inp := json.patch(high_risk_base, [{"op": "replace", "path": "/poa/leg/dual_control/approvers", "value": [
+		{"id": "spiffe://atb.example/agent/export-agent", "type": "requester"},
+		{"id": "approver-b", "type": "manager"},
+	]}])
 	d := decision with input as inp
 	d.allow == false
 	d.reason == "high_risk_dual_control_required"
@@ -115,7 +109,7 @@ test_low_risk_action_allowed {
 	inp := json.patch(medium_risk_base, [
 		{"op": "replace", "path": "/poa/act", "value": "custom.low_risk.action"},
 		{"op": "replace", "path": "/request/action", "value": "custom.low_risk.action"},
-		{"op": "remove", "path": "/poa/leg/approval"}
+		{"op": "remove", "path": "/poa/leg/approval"},
 	])
 	decision.allow with input as inp
 }

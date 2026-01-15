@@ -58,14 +58,20 @@ req_action := v {
 
 # Normalized helpers
 agent_spiffe := input.agent.spiffe_id
+
 poa := input.poa
+
 act := poa.act
+
 constraints := poa.con
+
 leg := poa.leg
+
 params := input.request.params
 
 # Platform identity (from OIDC token like Entra ID)
 platform := input.platform
+
 platform_sub := platform.sub
 
 poa_ttl := poa.exp - poa.iat
@@ -324,12 +330,10 @@ low_risk_allowlist := [
 	{"action": "system.status.get", "methods": ["GET"]},
 	{"action": "system.version.get", "methods": ["GET"]},
 	{"action": "system.config.read", "methods": ["GET"]},
-
 	# ── Knowledge Base / Documentation ──
 	{"action": "kb.faq.query", "methods": ["GET", "POST"]},
 	{"action": "kb.docs.search", "methods": ["GET", "POST"]},
 	{"action": "kb.article.read", "methods": ["GET"]},
-	
 	# ── Reporting (non-PII, aggregated) ──
 	{"action": "reporting.dashboard.view", "methods": ["GET"]},
 	{"action": "reporting.metrics.get", "methods": ["GET"]},
@@ -337,11 +341,9 @@ low_risk_allowlist := [
 	{"action": "report.inventory.status", "methods": ["GET"]},
 	{"action": "report.support.metrics", "methods": ["GET"]},
 	{"action": "analytics.dashboard.view", "methods": ["GET"]},
-
 	# ── Agent Introspection ──
 	{"action": "agent.self.capabilities", "methods": ["GET"]},
 	{"action": "agent.self.identity", "methods": ["GET"]},
-	
 	# ── CRM Read Operations ──
 	{"action": "crm.contact.read", "methods": ["GET"]},
 	{"action": "crm.contact.list", "methods": ["GET"]},
@@ -351,7 +353,6 @@ low_risk_allowlist := [
 	{"action": "crm.opportunity.list", "methods": ["GET"]},
 	{"action": "crm.account.read", "methods": ["GET"]},
 	{"action": "crm.account.list", "methods": ["GET"]},
-	
 	# ── ERP Read Operations ──
 	{"action": "erp.order.read", "methods": ["GET"]},
 	{"action": "erp.order.list", "methods": ["GET"]},
@@ -360,30 +361,25 @@ low_risk_allowlist := [
 	{"action": "erp.product.read", "methods": ["GET"]},
 	{"action": "erp.vendor.read", "methods": ["GET"]},
 	{"action": "erp.customer.read", "methods": ["GET"]},
-	
 	# ── HR Read Operations (non-PII) ──
 	{"action": "hr.org_chart.read", "methods": ["GET"]},
 	{"action": "hr.department.list", "methods": ["GET"]},
 	{"action": "hr.job_posting.read", "methods": ["GET"]},
 	{"action": "hr.holiday.list", "methods": ["GET"]},
-	
 	# ── Support/Ticketing Read Operations ──
 	{"action": "support.ticket.read", "methods": ["GET"]},
 	{"action": "support.ticket.list", "methods": ["GET"]},
 	{"action": "support.kb.search", "methods": ["GET", "POST"]},
 	{"action": "support.kb.read", "methods": ["GET"]},
-	
 	# ── Inventory Read Operations ──
 	{"action": "inventory.stock.read", "methods": ["GET"]},
 	{"action": "inventory.location.list", "methods": ["GET"]},
 	{"action": "warehouse.status.read", "methods": ["GET"]},
-	
 	# ── Catalog Read Operations ──
 	{"action": "catalog.product.read", "methods": ["GET"]},
 	{"action": "catalog.product.list", "methods": ["GET"]},
 	{"action": "catalog.category.list", "methods": ["GET"]},
 	{"action": "catalog.price.read", "methods": ["GET"]},
-	
 	# ── Collaboration Read Operations ──
 	{"action": "sharepoint.document.read", "methods": ["GET"]},
 	{"action": "sharepoint.list.read", "methods": ["GET"]},
@@ -425,7 +421,6 @@ medium_risk_actions := [
 	"crm.lead.convert",
 	"crm.opportunity.update",
 	"crm.account.update",
-	
 	# ── ERP/Order Management ──
 	"erp.order.create",
 	"erp.order.update",
@@ -434,38 +429,32 @@ medium_risk_actions := [
 	"erp.invoice.void",
 	"erp.purchase_order.create",
 	"erp.purchase_order.approve",
-	
 	# ── HR (limited PII access) ──
 	"hr.employee.view_limited",
 	"hr.employee.update_contact",
 	"hr.timesheet.approve",
 	"hr.leave.approve",
 	"hr.org_chart.update",
-	
 	# ── Support/Ticketing ──
 	"support.ticket.create",
 	"support.ticket.update",
 	"support.ticket.escalate",
 	"support.ticket.reassign",
 	"support.case.merge",
-	
 	# ── Inventory/Warehouse ──
 	"inventory.stock.adjust",
 	"inventory.transfer.create",
 	"inventory.count.submit",
 	"warehouse.location.update",
-	
 	# ── Product/Catalog ──
 	"catalog.product.update",
 	"catalog.product.publish",
 	"catalog.price.update",
 	"catalog.category.update",
-	
 	# ── Marketing ──
 	"marketing.campaign.launch",
 	"marketing.email.send_batch",
 	"marketing.segment.update",
-	
 	# ── Collaboration ──
 	"sharepoint.document.share_external",
 	"teams.channel.create",
@@ -488,7 +477,6 @@ high_risk_actions := [
 	"sap.journal_entry.post",
 	"sap.cost_center.create",
 	"sap.gl_account.create",
-	
 	# ── Financial Transactions ──
 	"erp.payment.process",
 	"erp.payment.batch",
@@ -497,7 +485,6 @@ high_risk_actions := [
 	"finance.wire_transfer.execute",
 	"finance.ach.batch_submit",
 	"finance.fx.trade_execute",
-	
 	# ── Salesforce ──
 	"salesforce.bulk.export",
 	"salesforce.bulk.delete",
@@ -506,13 +493,11 @@ high_risk_actions := [
 	"salesforce.permission_set.assign",
 	"salesforce.profile.modify",
 	"salesforce.report.export_all",
-	
 	# ── CRM Bulk Operations ──
 	"crm.contacts.bulk_delete",
 	"crm.contacts.bulk_export",
 	"crm.accounts.bulk_merge",
 	"crm.data.mass_update",
-	
 	# ── HR/PII Sensitive ──
 	"hr.employee.export_pii",
 	"hr.employee.terminate",
@@ -521,14 +506,12 @@ high_risk_actions := [
 	"hr.compensation.change",
 	"hr.ssn.view",
 	"hr.bank_details.update",
-	
 	# ── Customer Data ──
 	"customer.data.export",
 	"customer.data.bulk_delete",
 	"customer.pii.access",
 	"customer.gdpr.erasure",
 	"customer.ccpa.export",
-	
 	# ── IAM/Identity ──
 	"iam.role.assign",
 	"iam.role.create",
@@ -541,7 +524,6 @@ high_risk_actions := [
 	"azure.ad.role_assign",
 	"okta.user.unlock",
 	"okta.factor.reset",
-	
 	# ── Infrastructure ──
 	"aws.iam.policy_attach",
 	"aws.s3.bucket_policy",
@@ -551,7 +533,6 @@ high_risk_actions := [
 	"gcp.iam.binding_add",
 	"k8s.rbac.clusterrole_bind",
 	"k8s.secret.create",
-	
 	# ── OT/Safety Critical ──
 	"ot.system.manual_override",
 	"ot.safety.interlock_bypass",
@@ -559,17 +540,14 @@ high_risk_actions := [
 	"scada.alarm.acknowledge_critical",
 	"plc.program.upload",
 	"hmi.mode.change_to_manual",
-	
 	# ── ServiceNow ──
 	"servicenow.change.emergency_approve",
 	"servicenow.incident.priority1_create",
 	"servicenow.cmdb.bulk_update",
-	
 	# ── Workday ──
 	"workday.worker.terminate",
 	"workday.compensation.change",
 	"workday.org.restructure",
-	
 	# ── Dynamics 365 ──
 	"dynamics.entity.bulk_delete",
 	"dynamics.workflow.deactivate",
@@ -592,6 +570,7 @@ medium_risk_approved {
 	is_object(leg.approval)
 	is_string(leg.approval.approver_id)
 	count(leg.approval.approver_id) > 0
+
 	# Approver must be different from requester
 	leg.approval.approver_id != poa.sub
 }
@@ -603,14 +582,17 @@ high_risk_approved {
 	leg.dual_control.required == true
 	is_array(leg.dual_control.approvers)
 	count(leg.dual_control.approvers) >= 2
+
 	# All approvers must be distinct from requester
 	all_approvers_distinct
 }
 
 all_approvers_distinct {
 	approvers := leg.dual_control.approvers
+
 	# No approver is the same as the PoA subject
 	no_self_approval
+
 	# All approvers are unique (check via count of unique IDs)
 	unique_ids := {id | some i; id := approvers[i].id}
 	count(unique_ids) >= 2
@@ -618,6 +600,7 @@ all_approvers_distinct {
 
 no_self_approval {
 	approvers := leg.dual_control.approvers
+
 	# Ensure no approver has the same ID as PoA subject
 	count([a | some i; a := approvers[i]; a.id == poa.sub]) == 0
 }
@@ -683,6 +666,7 @@ sap_vendor_bank_change_allowed {
 	# Must have second-channel verification (e.g., callback to vendor)
 	verified := bool_or_default(params.second_channel_verified, false)
 	verified == true
+
 	# Change reason must be provided
 	reason := string_or_default(params.change_reason, "")
 	count(reason) > 10
@@ -735,6 +719,7 @@ sap_journal_entry_allowed {
 	cost_center := string_or_default(params.cost_center, "")
 	count(gl_account) > 0
 	count(cost_center) > 0
+
 	# Amount must be non-zero
 	amount := number_or_default(params.amount, 0)
 	amount != 0
@@ -825,10 +810,12 @@ action_allowed {
 hr_export_pii_allowed {
 	purpose := string_or_default(params.purpose, "")
 	count(purpose) > 5
+
 	# Valid purposes
 	valid_purposes := ["audit", "legal_hold", "regulatory_compliance", "internal_investigation"]
 	some i
 	valid_purposes[i] == purpose
+
 	# Record limit
 	record_count := number_or_default(params.record_count, 0)
 	record_count > 0
@@ -846,6 +833,7 @@ action_allowed {
 hr_terminate_allowed {
 	checklist_complete := bool_or_default(params.offboarding_checklist_complete, false)
 	checklist_complete == true
+
 	# Reason required
 	reason := string_or_default(params.termination_reason, "")
 	count(reason) > 10
@@ -863,6 +851,7 @@ hr_payroll_run_allowed {
 	# Payroll period must be specified
 	period := string_or_default(params.payroll_period, "")
 	count(period) > 0
+
 	# Employee count must be within limit
 	employee_count := number_or_default(params.employee_count, 0)
 	max_employees := number_or_default(constraints.max_payroll_employees, 10000)
@@ -882,6 +871,7 @@ hr_compensation_allowed {
 	max_pct := number_or_default(constraints.max_compensation_pct_change, 25)
 	pct_change <= max_pct
 	pct_change >= -50 # Cannot reduce more than 50%
+
 	# Justification required
 	justification := string_or_default(params.justification, "")
 	count(justification) > 20
@@ -898,6 +888,7 @@ action_allowed {
 customer_gdpr_erasure_allowed {
 	request_id := string_or_default(params.request_id, "")
 	count(request_id) > 0
+
 	# Must be within retention window (days since request)
 	days_since_request := number_or_default(params.days_since_request, 999)
 	days_since_request <= 30 # GDPR requires response within 30 days
@@ -911,6 +902,7 @@ action_allowed {
 customer_ccpa_export_allowed {
 	request_id := string_or_default(params.request_id, "")
 	count(request_id) > 0
+
 	# Format must be specified
 	format := string_or_default(params.export_format, "")
 	valid_formats := ["json", "csv", "pdf"]
@@ -931,6 +923,7 @@ customer_pii_access_allowed {
 	valid_purposes := ["support_case", "billing_inquiry", "identity_verification", "fraud_investigation"]
 	some i
 	valid_purposes[i] == purpose
+
 	# Must reference a specific support case or request
 	reference_id := string_or_default(params.reference_id, "")
 	count(reference_id) > 0
@@ -951,8 +944,10 @@ iam_role_assign_allowed {
 	target_user := string_or_default(params.target_user_id, "")
 	count(role) > 0
 	count(target_user) > 0
+
 	# Cannot self-assign
 	target_user != poa.sub
+
 	# Role must be in assignable list (if constrained)
 	assignable := object.get(constraints, "assignable_roles", [])
 	role_allowed_or_unconstrained(role, assignable)
@@ -980,9 +975,11 @@ iam_mfa_disable_allowed {
 	# Must have incident reference
 	incident_ref := string_or_default(params.incident_reference, "")
 	count(incident_ref) > 0
+
 	# Must be for a specific user (not bulk)
 	target_user := string_or_default(params.target_user_id, "")
 	count(target_user) > 0
+
 	# Must have identity verification
 	verified := bool_or_default(params.identity_verified, false)
 	verified == true
@@ -1020,6 +1017,7 @@ scada_setpoint_allowed {
 	max_safe := number_or_default(constraints.setpoint_max, 100)
 	new_value >= min_safe
 	new_value <= max_safe
+
 	# Safety review must be acknowledged
 	safety_ack := bool_or_default(params.safety_review_acknowledged, false)
 	safety_ack == true
@@ -1037,11 +1035,13 @@ safety_interlock_bypass_allowed {
 	# Emergency justification required
 	justification := string_or_default(params.emergency_justification, "")
 	count(justification) > 20
+
 	# Max bypass duration (seconds)
 	duration := number_or_default(params.bypass_duration_seconds, 0)
 	max_duration := number_or_default(constraints.max_bypass_duration, 3600)
 	duration > 0
 	duration <= max_duration
+
 	# Safety officer approval
 	safety_approved := bool_or_default(params.safety_officer_approved, false)
 	safety_approved == true
@@ -1060,6 +1060,7 @@ action_allowed {
 servicenow_emergency_change_allowed {
 	change_number := string_or_default(params.change_number, "")
 	count(change_number) > 0
+
 	# Must have either CAB approval or emergency flag with justification
 	cab_approved := bool_or_default(params.cab_approved, false)
 	emergency_flag := bool_or_default(params.emergency_flag, false)
@@ -1088,6 +1089,7 @@ servicenow_p1_incident_allowed {
 	# Impact assessment required
 	impact := string_or_default(params.business_impact, "")
 	count(impact) > 10
+
 	# Affected users/systems count
 	affected := number_or_default(params.affected_users, 0)
 	affected > 0
@@ -1121,9 +1123,11 @@ action_allowed {
 dynamics_bulk_delete_allowed {
 	entity_type := string_or_default(params.entity_type, "")
 	record_count := number_or_default(params.record_count, 0)
+
 	# Entity must be in deletable list
 	deletable := object.get(constraints, "deletable_entities", [])
 	entity_allowed_or_unconstrained(entity_type, deletable)
+
 	# Count limit
 	record_count > 0
 	record_count <= number_or_default(constraints.max_delete_count, 1000)
@@ -1150,6 +1154,7 @@ action_allowed {
 aws_iam_policy_attach_allowed {
 	policy_arn := string_or_default(params.policy_arn, "")
 	count(policy_arn) > 0
+
 	# Cannot attach admin policies without constraint approval
 	not startswith(policy_arn, "arn:aws:iam::aws:policy/Administrator")
 }
@@ -1157,6 +1162,7 @@ aws_iam_policy_attach_allowed {
 aws_iam_policy_attach_allowed {
 	policy_arn := string_or_default(params.policy_arn, "")
 	startswith(policy_arn, "arn:aws:iam::aws:policy/Administrator")
+
 	# Admin policy requires explicit constraint
 	admin_allowed := bool_or_default(constraints.allow_admin_policy, false)
 	admin_allowed == true
@@ -1175,6 +1181,7 @@ azure_rbac_assign_allowed {
 	count(role_name) > 0
 	count(principal_id) > 0
 	count(scope) > 0
+
 	# Block subscription-level Owner assignments without explicit constraint
 	not dangerous_azure_assignment(role_name, scope, constraints)
 }
@@ -1198,6 +1205,7 @@ azure_keyvault_secret_allowed {
 	secret_name := string_or_default(params.secret_name, "")
 	count(vault_name) > 0
 	count(secret_name) > 0
+
 	# Cannot set secrets in production vaults without constraint
 	not production_vault_blocked(vault_name, constraints)
 }

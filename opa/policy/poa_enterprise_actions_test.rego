@@ -20,16 +20,16 @@ iam_role_assign_base := {
 				"required": true,
 				"approvers": [
 					{"id": "approver-security", "type": "security"},
-					{"id": "approver-manager", "type": "manager"}
-				]
-			}
+					{"id": "approver-manager", "type": "manager"},
+				],
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "iam-assign-001"
+		"jti": "iam-assign-001",
 	},
 	"request": {"method": "POST", "path": "/iam/roles", "action": "iam.role.assign", "params": {"role_name": "admin", "target_user_id": "other-user-456"}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 test_iam_role_assign_without_dual_control_denied {
@@ -59,16 +59,16 @@ payment_transfer_base := {
 				"required": true,
 				"approvers": [
 					{"id": "cfo@example.com", "type": "executive"},
-					{"id": "compliance@example.com", "type": "compliance"}
-				]
-			}
+					{"id": "compliance@example.com", "type": "compliance"},
+				],
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "payment-001"
+		"jti": "payment-001",
 	},
 	"request": {"method": "POST", "path": "/payments/transfer", "action": "finance.wire_transfer.execute", "params": {}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 test_payment_transfer_without_dual_control_denied {
@@ -98,16 +98,16 @@ ot_manual_override_base := {
 				"required": true,
 				"approvers": [
 					{"id": "safety-officer", "type": "safety"},
-					{"id": "plant-manager", "type": "manager"}
-				]
-			}
+					{"id": "plant-manager", "type": "manager"},
+				],
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "ot-override-001"
+		"jti": "ot-override-001",
 	},
 	"request": {"method": "POST", "path": "/ot/override", "action": "ot.system.manual_override", "params": {"human_in_loop_approved": true}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 test_ot_manual_override_without_dual_control_denied {
@@ -136,15 +136,15 @@ crm_contact_read_base := {
 			"accountable_party": {"type": "human", "id": "sales@example.com"},
 			"approval": {
 				"approver_id": "manager@example.com",
-				"approved_at": "2024-01-15T10:00:00Z"
-			}
+				"approved_at": "2024-01-15T10:00:00Z",
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "crm-read-001"
+		"jti": "crm-read-001",
 	},
 	"request": {"method": "GET", "path": "/crm/contacts/C-12345", "action": "crm.contact.read", "params": {}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 test_crm_contact_read_with_approval_allowed {
@@ -163,15 +163,15 @@ crm_contact_delete_base := {
 			"accountable_party": {"type": "employee", "id": "admin@example.com"},
 			"approval": {
 				"approver_id": "supervisor@example.com",
-				"approved_at": "2024-01-15T10:00:00Z"
-			}
+				"approved_at": "2024-01-15T10:00:00Z",
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "crm-delete-001"
+		"jti": "crm-delete-001",
 	},
 	"request": {"method": "DELETE", "path": "/crm/contacts/C-12345", "action": "crm.contact.delete", "params": {}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 test_crm_contact_delete_with_approval_allowed {
@@ -195,16 +195,16 @@ sap_vendor_change_base := {
 				"required": true,
 				"approvers": [
 					{"id": "finance@example.com", "type": "finance"},
-					{"id": "compliance@example.com", "type": "compliance"}
-				]
-			}
+					{"id": "compliance@example.com", "type": "compliance"},
+				],
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "sap-change-001"
+		"jti": "sap-change-001",
 	},
 	"request": {"method": "PATCH", "path": "/sap/vendors/V-98765", "action": "sap.vendor.change", "params": {}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 test_sap_vendor_change_without_dual_control_denied {
@@ -222,9 +222,7 @@ test_sap_vendor_change_with_dual_control_allowed {
 # ─────────────────────────────────────────────────────────────────────────────
 
 test_spiffe_mismatch_denied {
-	inp := json.patch(crm_contact_read_base, [
-		{"op": "replace", "path": "/agent/spiffe_id", "value": "spiffe://atb.example/agent/different-agent"}
-	])
+	inp := json.patch(crm_contact_read_base, [{"op": "replace", "path": "/agent/spiffe_id", "value": "spiffe://atb.example/agent/different-agent"}])
 	d := decision with input as inp
 	d.allow == false
 }

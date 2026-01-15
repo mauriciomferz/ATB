@@ -14,22 +14,22 @@ base_input := {
 			"accountable_party": {
 				"type": "employee",
 				"id": "emp-123",
-				"display_name": "Alice Smith"
+				"display_name": "Alice Smith",
 			},
 			"dual_control": {
 				"required": true,
 				"approvers": [
 					{"id": "approver-001", "type": "employee"},
-					{"id": "approver-002", "type": "employee"}
-				]
-			}
+					{"id": "approver-002", "type": "employee"},
+				],
+			},
 		},
 		"iat": 1700000000,
 		"exp": 1700000300,
-		"jti": "test-jti-001"
+		"jti": "test-jti-001",
 	},
 	"request": {"method": "POST", "path": "/test", "action": "sap.vendor.change", "params": {"amount": 500}},
-	"policy": {"max_ttl_seconds": 300}
+	"policy": {"max_ttl_seconds": 300},
 }
 
 # Test: valid leg allows request
@@ -101,11 +101,11 @@ test_leg_valid_with_optional_fields {
 			"required": true,
 			"approvers": [
 				{"type": "manager", "id": "mgr-456"},
-				{"type": "manager", "id": "mgr-789"}
+				{"type": "manager", "id": "mgr-789"},
 			],
-			"approved_at": "2024-01-15T10:00:00Z"
+			"approved_at": "2024-01-15T10:00:00Z",
 		}},
-		{"op": "add", "path": "/poa/leg/regulation_refs", "value": ["NIS2", "EU-AI-Act"]}
+		{"op": "add", "path": "/poa/leg/regulation_refs", "value": ["NIS2", "EU-AI-Act"]},
 	])
 	decision.allow with input as inp
 }
