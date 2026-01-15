@@ -8,6 +8,18 @@ The gateways emit one JSON audit event per decision (allow/deny/error) to stdout
 - **Traceability**: Correlate traces/logs via `request_id`
 - **Observability**: Keep events structured for SIEM ingestion
 - **Compliance**: Support GDPR, SOX, and regulatory requirements
+- **Security monitoring**: Track authorization events, approvals, and security violations
+
+---
+
+## Audit Event Sources
+
+ATB emits audit events from two services:
+
+| Service | Events | Purpose |
+|---------|--------|---------|
+| **Broker** | Request decisions | Tracks allow/deny for proxied requests |
+| **AgentAuth** | Authorization events | Tracks challenges, approvals, token issuance |
 
 ---
 
@@ -131,6 +143,138 @@ Canonical JSON Schema: [schemas/audit-event.schema.json](../schemas/audit-event.
   "target_service": "http://upstream:9000",
   "method": "POST",
   "path": "/sap/vendor/list"
+}
+```
+
+---
+
+## AgentAuth Audit Events
+
+AgentAuth emits structured audit events for authorization operations. These events track the full lifecycle of PoA token issuance.
+
+### AgentAuth Event Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | string | RFC3339 UTC timestamp |
+| `event_type` | string | Event category (see below) |
+| `request_id` | string | Unique request correlation ID |
+| `agent_spiffe_id` | string | SPIFFE ID of the requesting agent |
+| `action` | string | Action being authorized |
+| `risk_tier` | string | `low`, `medium`, or `high` |
+| `approver_id` | string | Approver identity (for approval events) |
+| `challenge_id` | string | Challenge ID (for approval flow) |
+| `success` | boolean | Whether the operation succeeded |
+| `error` | string | Error message (on failure) |
+| `source_ip` | string | Client IP address |
+| `user_agent` | string | Client user agent |
+| `duration_ms` | number | Processing time in milliseconds |
+
+### AgentAuth Event Types
+
+| Event Type | Description |
+|------------|-------------|
+| `challenge_created` | New approval challenge created |
+| `approval_submitted` | Approver submitted approval |
+| `approval_rejected` | Approver rejected request |
+| `poa_issued` | PoA token successfully issued |
+| `auth_failed` | Authentication failed |
+| `rate_limited` | Request rate limited |
+| `validation_failed` | Input validation failed |
+
+### Challenge Created
+
+```json
+{
+  "timestamp": "2026-01-12T10:00:00Z",
+  "event_type": "challenge_created",
+  "request_id": "req-1001",
+  "agent_spiffe_id": "spiffe://example.org/agent/finance-bot",
+  "action": "sap.vendor.change",
+  "risk_tier": "high",
+  "challenge_id": "ch_abc123",
+  "required_approvers": 2,
+  "success": true,
+  "source_ip": "10.0.0.50",
+  "duration_ms": 15
+}
+```
+
+### Approval Submitted
+
+```json
+{
+  "timestamp": "2026-01-12T10:05:00Z",
+  "event_type": "approval_submitted",
+  "request_id": "req-1002",
+  "challenge_id": "ch_abc123",
+  "approver_id": "alice@example.com",
+  "action": "sap.vendor.change",
+  "success": true,
+  "source_ip": "10.0.0.100"
+}
+```
+
+### Self-Approval Blocked
+
+```json
+{
+  "timestamp": "2026-01-12T10:05:30Z",
+  "event_type": "approval_submitted",
+  "request_id": "req-1003",
+  "challenge_id": "ch_abc123",
+  "approver_id": "finance-bot@example.com",
+  "action": "sap.vendor.change",
+  "success": false,
+  "error": "self_approval_not_allowed",
+  "source_ip": "10.0.0.50"
+}
+```
+
+### PoA Issued (High Risk)
+
+```json
+{
+  "timestamp": "2026-01-12T10:10:00Z",
+  "event_type": "poa_issued",
+  "request_id": "req-1004",
+  "agent_spiffe_id": "spiffe://example.org/agent/finance-bot",
+  "action": "sap.vendor.change",
+  "risk_tier": "high",
+  "challenge_id": "ch_abc123",
+  "poa_jti": "poa_xyz789",
+  "approvers": ["alice@example.com", "bob@example.com"],
+  "success": true,
+  "duration_ms": 8
+}
+```
+
+### Authentication Failed
+
+```json
+{
+  "timestamp": "2026-01-12T10:15:00Z",
+  "event_type": "auth_failed",
+  "request_id": "req-1005",
+  "approver_id": "mallory@example.com",
+  "success": false,
+  "error": "invalid_jwt_signature",
+  "source_ip": "192.168.1.100",
+  "user_agent": "curl/7.81.0"
+}
+```
+
+### Rate Limited
+
+```json
+{
+  "timestamp": "2026-01-12T10:20:00Z",
+  "event_type": "rate_limited",
+  "request_id": "req-1006",
+  "agent_spiffe_id": "spiffe://example.org/agent/rogue-bot",
+  "source_ip": "10.0.0.200",
+  "success": false,
+  "error": "rate_limit_exceeded"
 }
 ```
 
