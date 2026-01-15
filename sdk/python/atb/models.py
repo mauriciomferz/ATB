@@ -14,6 +14,7 @@ from enum import Enum
 
 class RiskTier(str, Enum):
     """Risk classification for actions."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -22,6 +23,7 @@ class RiskTier(str, Enum):
 
 class PartyType(str, Enum):
     """Type of accountable party."""
+
     HUMAN = "human"
     ORGANIZATION = "organization"
     SYSTEM = "system"
@@ -30,6 +32,7 @@ class PartyType(str, Enum):
 @dataclass
 class AccountableParty:
     """The party legally responsible for an agent's actions."""
+
     type: PartyType
     id: str
     name: Optional[str] = None
@@ -51,6 +54,7 @@ class AccountableParty:
 @dataclass
 class DualControl:
     """Dual control requirements for high-risk actions."""
+
     required: bool = False
     min_approvers: int = 2
     approver_roles: List[str] = field(default_factory=list)
@@ -67,9 +71,10 @@ class DualControl:
 @dataclass
 class ActionLeg:
     """Legal grounding for an agent action.
-    
+
     'Leg' stands for 'Legal Basis' - the lawful basis for processing.
     """
+
     basis: str  # e.g., "contract", "consent", "legitimate_interest"
     jurisdiction: str  # e.g., "US", "EU", "GDPR"
     accountable_party: AccountableParty
@@ -99,15 +104,16 @@ class ActionLeg:
 @dataclass
 class PoARequest:
     """Request for a Proof-of-Authorization mandate.
-    
+
     This represents the initial request to the AgentAuth service
     to create a challenge for authorization.
     """
+
     agent_spiffe_id: str
     act: str  # Action identifier, e.g., "crm.contact.read"
     con: Dict[str, Any]  # Constraints, e.g., {"contact_id": "123"}
     leg: ActionLeg  # Legal basis
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API requests."""
         return {
@@ -121,6 +127,7 @@ class PoARequest:
 @dataclass
 class ChallengeResponse:
     """Response from creating a challenge."""
+
     challenge_id: str
     expires_at: datetime
     requires_dual_control: bool
@@ -134,7 +141,7 @@ class ChallengeResponse:
         if isinstance(expires_at, str):
             # Parse ISO format datetime
             expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        
+
         return cls(
             challenge_id=data["challenge_id"],
             expires_at=expires_at,
@@ -147,6 +154,7 @@ class ChallengeResponse:
 @dataclass
 class ApprovalRequest:
     """Request to approve a challenge."""
+
     challenge_id: str
     approver: str
     approval_token: Optional[str] = None  # JWT for authenticated approvals
@@ -162,6 +170,7 @@ class ApprovalRequest:
 @dataclass
 class Approver:
     """An approver who has approved a challenge."""
+
     id: str
     approved_at: datetime
 
@@ -171,7 +180,7 @@ class Approver:
         approved_at = data.get("approved_at", "")
         if isinstance(approved_at, str):
             approved_at = datetime.fromisoformat(approved_at.replace("Z", "+00:00"))
-        
+
         return cls(
             id=data["id"],
             approved_at=approved_at,
@@ -181,6 +190,7 @@ class Approver:
 @dataclass
 class ApprovalResponse:
     """Response from an approval request."""
+
     status: str
     approvers_count: int
     approvers_needed: int
@@ -190,9 +200,7 @@ class ApprovalResponse:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ApprovalResponse":
         """Create from API response dictionary."""
-        approvers = [
-            Approver.from_dict(a) for a in data.get("approvers", [])
-        ]
+        approvers = [Approver.from_dict(a) for a in data.get("approvers", [])]
         return cls(
             status=data.get("status", ""),
             approvers_count=data.get("approvers_count", 0),
@@ -205,6 +213,7 @@ class ApprovalResponse:
 @dataclass
 class MandateRequest:
     """Request to issue a mandate (PoA token)."""
+
     challenge_id: str
 
     def to_dict(self) -> Dict[str, Any]:
@@ -217,6 +226,7 @@ class MandateRequest:
 @dataclass
 class MandateResponse:
     """Response containing the issued PoA token."""
+
     poa_token: str
     expires_at: datetime
     token_id: str = ""
@@ -227,7 +237,7 @@ class MandateResponse:
         expires_at = data.get("expires_at", "")
         if isinstance(expires_at, str):
             expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        
+
         return cls(
             poa_token=data.get("poa_token", ""),
             expires_at=expires_at,
@@ -235,9 +245,10 @@ class MandateResponse:
         )
 
 
-@dataclass 
+@dataclass
 class ChallengeStatus:
     """Status of a challenge."""
+
     challenge_id: str
     action: str
     agent_spiffe_id: str
@@ -255,16 +266,14 @@ class ChallengeStatus:
         """Create from API response dictionary."""
         created_at = data.get("created_at", "")
         expires_at = data.get("expires_at", "")
-        
+
         if isinstance(created_at, str):
             created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
         if isinstance(expires_at, str):
             expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        
-        approvers = [
-            Approver.from_dict(a) for a in data.get("approvers", [])
-        ]
-        
+
+        approvers = [Approver.from_dict(a) for a in data.get("approvers", [])]
+
         return cls(
             challenge_id=data["challenge_id"],
             action=data.get("action", ""),
