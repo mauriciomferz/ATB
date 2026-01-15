@@ -9,9 +9,9 @@ This module provides structured data types for:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime
 from enum import Enum
+from typing import Any
 
 
 class RiskTier(str, Enum):
@@ -37,7 +37,7 @@ class AccountableParty:
 
     type: PartyType
     id: str
-    name: Optional[str] = None
+    name: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -80,9 +80,9 @@ class ActionLeg:
     basis: str  # e.g., "contract", "consent", "legitimate_interest"
     jurisdiction: str  # e.g., "US", "EU", "GDPR"
     accountable_party: AccountableParty
-    dual_control: Optional[DualControl] = None
-    purpose: Optional[str] = None
-    retention_days: Optional[int] = None
+    dual_control: DualControl | None = None
+    purpose: str | None = None
+    retention_days: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -159,7 +159,7 @@ class ApprovalRequest:
 
     challenge_id: str
     approver: str
-    approval_token: Optional[str] = None  # JWT for authenticated approvals
+    approval_token: str | None = None  # JWT for authenticated approvals
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API requests."""

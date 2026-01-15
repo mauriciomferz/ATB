@@ -14,7 +14,6 @@ from atb.exceptions import (
     TokenExpiredError,
     ValidationError,
 )
-from atb.poa import AccountableParty, LegalGrounding, PoA, PoABuilder
 from atb.models import (
     ActionLeg,
     ApprovalRequest,
@@ -29,6 +28,7 @@ from atb.models import (
     PoARequest,
     RiskTier,
 )
+from atb.poa import AccountableParty, LegalGrounding, PoA, PoABuilder
 
 __version__ = "0.1.0"
 __all__ = [
