@@ -238,29 +238,50 @@ curl -X POST http://localhost:8444/v1/challenge \
 
 ---
 
-### 7. Constraint Enforcement at Broker
+### 7. Constraint Enforcement at Broker ✅
 
 **Issue:** Token constraints may not be validated against actual request.
 
-**Required:**
+**Status:** ✅ Implemented in Broker service.
 
-- [ ] Broker validates `con.contact_id` matches request path
-- [ ] Broker validates `con.amount` matches request body
-- [ ] Reject requests that exceed token constraints
+**Validated Constraints:**
+
+- [x] `contact_id` - validated against request path/query/body
+- [x] `resource_id` - validated against request path/query/body
+- [x] `max_amount` - validated against request body amount field
+- [x] `read_only` - validates HTTP method is GET/HEAD/OPTIONS
+- [x] `allowed_methods` - validates HTTP method in whitelist
+- [x] `path_prefix` - validates request path starts with prefix
+
+**Configuration:**
+
+```go
+constraintConfig := ConstraintEnforcementConfig{
+    Enabled:           true,
+    StrictMode:        false,
+    EnforceContactID:  true,
+    EnforceAmount:     true,
+    EnforceResourceID: true,
+}
+```
 
 ---
 
 ## 🟡 Medium Priority
 
-### 8. Audit Logging
+### 8. Audit Logging ✅
 
-**Required Events:**
+**Status:** ✅ Implemented in both AgentAuth and Broker services.
 
-- [ ] Challenge creation (who, what action, when)
-- [ ] Approval (who approved, when)
-- [ ] Mandate issuance (token JTI, expiry)
-- [ ] Token usage at Broker (success/failure)
-- [ ] Policy decision details
+**Audit Events:**
+
+- [x] `challenge.created` - Challenge creation with risk tier
+- [x] `challenge.approved` - Approval recorded with approver ID
+- [x] `mandate.issued` - Token issuance with JTI and expiry
+- [x] Token usage at Broker (allow/deny with reason)
+- [x] Policy decision details from OPA
+
+**Example Event:**
 
 ```json
 {
@@ -270,8 +291,10 @@ curl -X POST http://localhost:8444/v1/challenge \
   "agent_spiffe_id": "spiffe://example.org/agent/sales-bot",
   "action": "crm.contact.read",
   "risk_tier": "low",
-  "requires_approval": true,
-  "source_ip": "10.0.1.50"
+  "requires_dual_control": false,
+  "source_ip": "10.0.1.50",
+  "success": true,
+  "expires_at": "2026-01-15T12:05:00Z"
 }
 ```
 
@@ -291,14 +314,16 @@ agentauth:
 
 ---
 
-### 10. Input Validation
+### 10. Input Validation ✅
 
-**All Endpoints:**
+**Status:** ✅ Implemented in AgentAuth service.
 
-- [ ] Maximum request body size: 1MB
-- [ ] JSON depth limit: 10 levels
-- [ ] String length limits per field
-- [ ] Reject null bytes in strings
+**Validation Rules:**
+
+- [x] Maximum request body size: 1MB
+- [x] JSON depth limit: 10 levels
+- [x] String length limits: 4096 general, 512 for SPIFFE ID, 256 for action
+- [x] Null byte rejection in all string fields and keys
 
 ---
 
@@ -329,15 +354,32 @@ curl -sI http://localhost:8444/health | grep -E '^X-'
 
 ---
 
-### 12. Key Rotation
+### 12. Key Rotation ✅
+
+**Status:** ✅ Implemented with multi-key JWKS support.
 
 **Process:**
 
 1. Generate new signing key
-2. Add to JWKS with new `kid`
-3. Start signing new tokens with new key
-4. Keep old key in JWKS for validation (TTL period)
-5. Remove old key after all tokens expired
+2. Set as `POA_SIGNING_ED25519_PRIVKEY_PEM_NEXT`
+3. Promote to primary: move to `POA_SIGNING_ED25519_PRIVKEY_PEM`
+4. Move old key to `POA_SIGNING_ED25519_PRIVKEY_PEM_PREV`
+5. Remove previous key after TTL period
+
+**Environment Variables:**
+
+```bash
+# Primary key (used for signing)
+export POA_SIGNING_ED25519_PRIVKEY_PEM=$(cat current.key)
+
+# Previous key (verification only, rotation overlap)
+export POA_SIGNING_ED25519_PRIVKEY_PEM_PREV=$(cat previous.key)
+
+# Next key (pre-staged for rotation)
+export POA_SIGNING_ED25519_PRIVKEY_PEM_NEXT=$(cat next.key)
+```
+
+**JWKS:** All configured keys appear in `/.well-known/jwks.json` for verification.
 
 ---
 

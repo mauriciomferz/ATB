@@ -316,6 +316,36 @@ func authenticateApprover(r *http.Request, config ApproverAuthConfig) (string, e
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Structured Audit Logging
+// ─────────────────────────────────────────────────────────────────────────────
+
+// AuditEvent represents a structured audit log entry
+type AuditEvent struct {
+	Timestamp       string                 `json:"timestamp"`
+	Event           string                 `json:"event"`
+	ChallengeID     string                 `json:"challenge_id,omitempty"`
+	MandateID       string                 `json:"mandate_id,omitempty"`
+	AgentSPIFFEID   string                 `json:"agent_spiffe_id,omitempty"`
+	Action          string                 `json:"action,omitempty"`
+	Constraints     map[string]interface{} `json:"constraints,omitempty"`
+	RiskTier        string                 `json:"risk_tier,omitempty"`
+	RequiresDualControl bool              `json:"requires_dual_control,omitempty"`
+	ApproverID      string                 `json:"approver_id,omitempty"`
+	ApproversCount  int                    `json:"approvers_count,omitempty"`
+	SourceIP        string                 `json:"source_ip,omitempty"`
+	Success         bool                   `json:"success"`
+	Reason          string                 `json:"reason,omitempty"`
+	ExpiresAt       string                 `json:"expires_at,omitempty"`
+}
+
+// auditLog outputs a structured JSON audit event to stdout
+func auditLog(event AuditEvent) {
+	event.Timestamp = time.Now().UTC().Format(time.RFC3339)
+	data, _ := json.Marshal(event)
+	fmt.Println(string(data))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Data Types
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -429,10 +459,99 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Input Validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+const (
+	maxBodySize      = 1 << 20 // 1MB
+	maxJSONDepth     = 10
+	maxStringLength  = 4096
+	maxSPIFFELength  = 512
+	maxActionLength  = 256
+)
+
+// readJSON reads and validates JSON input with size and depth limits
 func readJSON(r *http.Request, out interface{}) error {
+	// Limit request body size
+	r.Body = http.MaxBytesReader(nil, r.Body, maxBodySize)
+
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	return dec.Decode(out)
+
+	if err := dec.Decode(out); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateRequestInput performs security validation on request fields
+func validateRequestInput(req *ChallengeRequest) error {
+	// Check for null bytes in strings (injection prevention)
+	if strings.ContainsRune(req.AgentSPIFFEID, 0) {
+		return errors.New("null bytes not allowed in agent_spiffe_id")
+	}
+	if strings.ContainsRune(req.Act, 0) {
+		return errors.New("null bytes not allowed in action")
+	}
+
+	// String length limits
+	if len(req.AgentSPIFFEID) > maxSPIFFELength {
+		return fmt.Errorf("agent_spiffe_id exceeds max length of %d", maxSPIFFELength)
+	}
+	if len(req.Act) > maxActionLength {
+		return fmt.Errorf("action exceeds max length of %d", maxActionLength)
+	}
+
+	// Validate JSON depth for constraints
+	if err := validateJSONDepth(req.Con, 0); err != nil {
+		return fmt.Errorf("constraints: %w", err)
+	}
+	if err := validateJSONDepth(req.Leg, 0); err != nil {
+		return fmt.Errorf("legal_basis: %w", err)
+	}
+
+	return nil
+}
+
+// validateJSONDepth recursively checks JSON depth
+func validateJSONDepth(v interface{}, depth int) error {
+	if depth > maxJSONDepth {
+		return fmt.Errorf("exceeds max depth of %d", maxJSONDepth)
+	}
+
+	switch val := v.(type) {
+	case map[string]interface{}:
+		for k, child := range val {
+			// Check key length
+			if len(k) > maxStringLength {
+				return fmt.Errorf("key too long: %d", len(k))
+			}
+			// Check for null bytes in keys
+			if strings.ContainsRune(k, 0) {
+				return errors.New("null bytes not allowed in keys")
+			}
+			if err := validateJSONDepth(child, depth+1); err != nil {
+				return err
+			}
+		}
+	case []interface{}:
+		for _, child := range val {
+			if err := validateJSONDepth(child, depth+1); err != nil {
+				return err
+			}
+		}
+	case string:
+		if len(val) > maxStringLength {
+			return fmt.Errorf("string value too long: %d", len(val))
+		}
+		if strings.ContainsRune(val, 0) {
+			return errors.New("null bytes not allowed in values")
+		}
+	}
+
+	return nil
 }
 
 // requiresDualControl checks if the request requires two approvers.
@@ -579,39 +698,128 @@ func main() {
 	}
 	log.Printf("Dual control required for actions: %v", highRiskActions)
 
-	var priv ed25519.PrivateKey
-	var pub ed25519.PublicKey
+	// ─────────────────────────────────────────────────────────────────────────
+	// Key Rotation Support
+	// Supports multiple signing keys for graceful key rotation
+	// Primary key is used for signing, all keys are available for verification
+	// ─────────────────────────────────────────────────────────────────────────
+
+	type SigningKey struct {
+		Kid     string
+		Private ed25519.PrivateKey
+		Public  ed25519.PublicKey
+		Primary bool
+	}
+
+	var signingKeys []SigningKey
+	var primaryKey *SigningKey
+
+	// Load primary signing key
 	pemKey := strings.TrimSpace(os.Getenv("POA_SIGNING_ED25519_PRIVKEY_PEM"))
 	if pemKey != "" {
 		k, err := decodeEd25519PrivateKeyFromPEM(pemKey)
 		if err != nil {
 			log.Fatalf("invalid POA_SIGNING_ED25519_PRIVKEY_PEM: %v", err)
 		}
-		priv = k
-		pub = k.Public().(ed25519.PublicKey)
-	} else {
+		pub := k.Public().(ed25519.PublicKey)
+		kid := kidForPublicKey(pub)
+		signingKeys = append(signingKeys, SigningKey{
+			Kid:     kid,
+			Private: k,
+			Public:  pub,
+			Primary: true,
+		})
+		log.Printf("Loaded primary signing key (kid=%s)", kid)
+	}
+
+	// Load previous key for rotation overlap (verification only)
+	pemKeyPrev := strings.TrimSpace(os.Getenv("POA_SIGNING_ED25519_PRIVKEY_PEM_PREV"))
+	if pemKeyPrev != "" {
+		k, err := decodeEd25519PrivateKeyFromPEM(pemKeyPrev)
+		if err != nil {
+			log.Printf("WARN: invalid POA_SIGNING_ED25519_PRIVKEY_PEM_PREV: %v (skipping)", err)
+		} else {
+			pub := k.Public().(ed25519.PublicKey)
+			kid := kidForPublicKey(pub)
+			signingKeys = append(signingKeys, SigningKey{
+				Kid:     kid,
+				Private: k,
+				Public:  pub,
+				Primary: false,
+			})
+			log.Printf("Loaded previous signing key for rotation (kid=%s)", kid)
+		}
+	}
+
+	// Load next key for rotation (signing will switch when promoted)
+	pemKeyNext := strings.TrimSpace(os.Getenv("POA_SIGNING_ED25519_PRIVKEY_PEM_NEXT"))
+	if pemKeyNext != "" {
+		k, err := decodeEd25519PrivateKeyFromPEM(pemKeyNext)
+		if err != nil {
+			log.Printf("WARN: invalid POA_SIGNING_ED25519_PRIVKEY_PEM_NEXT: %v (skipping)", err)
+		} else {
+			pub := k.Public().(ed25519.PublicKey)
+			kid := kidForPublicKey(pub)
+			signingKeys = append(signingKeys, SigningKey{
+				Kid:     kid,
+				Private: k,
+				Public:  pub,
+				Primary: false,
+			})
+			log.Printf("Loaded next signing key for rotation (kid=%s)", kid)
+		}
+	}
+
+	// If no keys configured, generate ephemeral key
+	if len(signingKeys) == 0 {
 		log.Printf("WARN: POA_SIGNING_ED25519_PRIVKEY_PEM not set; generating ephemeral key (NOT for production)")
 		_, k, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			log.Fatalf("keygen failed: %v", err)
 		}
-		priv = k
-		pub = k.Public().(ed25519.PublicKey)
+		pub := k.Public().(ed25519.PublicKey)
+		kid := kidForPublicKey(pub)
+		signingKeys = append(signingKeys, SigningKey{
+			Kid:     kid,
+			Private: k,
+			Public:  pub,
+			Primary: true,
+		})
 	}
 
-	kid := kidForPublicKey(pub)
-	jwks := map[string]interface{}{
-		"keys": []map[string]interface{}{
-			{
-				"kty": "OKP",
-				"crv": "Ed25519",
-				"use": "sig",
-				"alg": "EdDSA",
-				"kid": kid,
-				"x":   b64url(pub),
-			},
-		},
+	// Find primary key
+	for i := range signingKeys {
+		if signingKeys[i].Primary {
+			primaryKey = &signingKeys[i]
+			break
+		}
 	}
+	if primaryKey == nil {
+		primaryKey = &signingKeys[0]
+		primaryKey.Primary = true
+	}
+
+	// Convenience variables for backward compatibility
+	priv := primaryKey.Private
+	_ = primaryKey.Public // Used in JWKS
+	kid := primaryKey.Kid
+
+	// Build JWKS with all keys for verification
+	jwksKeys := make([]map[string]interface{}, len(signingKeys))
+	for i, sk := range signingKeys {
+		jwksKeys[i] = map[string]interface{}{
+			"kty": "OKP",
+			"crv": "Ed25519",
+			"use": "sig",
+			"alg": "EdDSA",
+			"kid": sk.Kid,
+			"x":   b64url(sk.Public),
+		}
+	}
+	jwks := map[string]interface{}{
+		"keys": jwksKeys,
+	}
+	log.Printf("JWKS contains %d key(s) for verification", len(signingKeys))
 
 	store := newStore()
 	go func() {
@@ -695,6 +903,12 @@ func main() {
 		req.AgentSPIFFEID = strings.TrimSpace(req.AgentSPIFFEID)
 		req.Act = strings.TrimSpace(req.Act)
 
+		// Input validation (size, depth, null bytes)
+		if err := validateRequestInput(&req); err != nil {
+			http.Error(w, fmt.Sprintf("input validation failed: %s", err.Error()), http.StatusBadRequest)
+			return
+		}
+
 		// Strict SPIFFE ID validation
 		if err := validateSPIFFEID(req.AgentSPIFFEID); err != nil {
 			http.Error(w, fmt.Sprintf("invalid agent_spiffe_id: %s", err.Error()), http.StatusBadRequest)
@@ -729,6 +943,24 @@ func main() {
 		if needsDualControl {
 			approversNeeded = 2
 		}
+
+		// Audit: challenge created
+		riskTier := "low"
+		if needsDualControl {
+			riskTier = "high"
+		}
+		auditLog(AuditEvent{
+			Event:           "challenge.created",
+			ChallengeID:     c.ID,
+			AgentSPIFFEID:   req.AgentSPIFFEID,
+			Action:          req.Act,
+			Constraints:     req.Con,
+			RiskTier:        riskTier,
+			RequiresDualControl: needsDualControl,
+			SourceIP:        getClientIP(r),
+			Success:         true,
+			ExpiresAt:       c.ExpiresAt.Format(time.RFC3339),
+		})
 
 		writeJSON(w, 200, map[string]interface{}{
 			"challenge_id":      c.ID,
@@ -830,6 +1062,20 @@ func main() {
 			c.Approved = true
 		}
 
+		// Audit: approval recorded
+		auditLog(AuditEvent{
+			Event:           "challenge.approved",
+			ChallengeID:     c.ID,
+			AgentSPIFFEID:   c.Req.AgentSPIFFEID,
+			Action:          c.Req.Act,
+			ApproverID:      approverID,
+			ApproversCount:  len(c.Approvers),
+			RequiresDualControl: c.RequiresDualControl,
+			SourceIP:        getClientIP(r),
+			Success:         true,
+			Reason:          fmt.Sprintf("approver %d of %d", len(c.Approvers), approversNeeded),
+		})
+
 		writeJSON(w, 200, map[string]interface{}{
 			"status":            "approved",
 			"approvers_count":   len(c.Approvers),
@@ -921,6 +1167,22 @@ func main() {
 			http.Error(w, "signing failed", http.StatusInternalServerError)
 			return
 		}
+
+		// Audit: mandate issued
+		auditLog(AuditEvent{
+			Event:           "mandate.issued",
+			ChallengeID:     c.ID,
+			MandateID:       claims.ID,
+			AgentSPIFFEID:   c.Req.AgentSPIFFEID,
+			Action:          c.Req.Act,
+			Constraints:     c.Req.Con,
+			RequiresDualControl: c.RequiresDualControl,
+			ApproversCount:  len(c.Approvers),
+			SourceIP:        getClientIP(r),
+			Success:         true,
+			ExpiresAt:       exp.Time.Format(time.RFC3339),
+		})
+
 		writeJSON(w, 200, map[string]interface{}{
 			"token":             jwtStr,
 			"expires_at":        exp.Time.Format(time.RFC3339),

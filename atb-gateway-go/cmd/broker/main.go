@@ -691,6 +691,252 @@ func (f *FederationManager) Stop() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Constraint Enforcement
+// Validates that request parameters match PoA token constraints
+// ──────────────────────────────────────────────────────────────────────────────
+
+// ConstraintViolation represents a constraint check failure
+type ConstraintViolation struct {
+	Field    string      `json:"field"`
+	Expected interface{} `json:"expected"`
+	Actual   interface{} `json:"actual"`
+	Message  string      `json:"message"`
+}
+
+// ConstraintEnforcementConfig defines which constraints to enforce
+type ConstraintEnforcementConfig struct {
+	Enabled         bool     `json:"enabled"`
+	StrictMode      bool     `json:"strict_mode"`      // Fail if constraint exists but can't be validated
+	EnforceContactID bool    `json:"enforce_contact_id"`
+	EnforceAmount   bool     `json:"enforce_amount"`
+	EnforceResourceID bool   `json:"enforce_resource_id"`
+	CustomConstraints []string `json:"custom_constraints"` // Additional constraint keys to enforce
+}
+
+var constraintConfig = ConstraintEnforcementConfig{
+	Enabled:          true,
+	StrictMode:       false,
+	EnforceContactID: true,
+	EnforceAmount:    true,
+	EnforceResourceID: true,
+}
+
+// ValidateConstraints checks if request parameters match PoA token constraints
+// Returns nil if valid, or a list of violations if constraints are violated
+func ValidateConstraints(constraints map[string]interface{}, r *http.Request, body []byte) []ConstraintViolation {
+	if !constraintConfig.Enabled || constraints == nil {
+		return nil
+	}
+
+	var violations []ConstraintViolation
+
+	// Extract path parameters (e.g., /contacts/{id} -> id)
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	var pathID string
+	if len(pathParts) >= 2 {
+		pathID = pathParts[len(pathParts)-1]
+	}
+
+	// Parse JSON body if present
+	var bodyData map[string]interface{}
+	if len(body) > 0 {
+		_ = json.Unmarshal(body, &bodyData) // Ignore parse errors, constraint just won't match
+	}
+
+	// Query parameters
+	queryParams := r.URL.Query()
+
+	// Check contact_id constraint
+	if constraintConfig.EnforceContactID {
+		if contactID, ok := constraints["contact_id"]; ok {
+			actualID := getRequestValue("contact_id", pathID, queryParams, bodyData)
+			if !matchConstraint(contactID, actualID) {
+				violations = append(violations, ConstraintViolation{
+					Field:    "contact_id",
+					Expected: contactID,
+					Actual:   actualID,
+					Message:  "contact_id in request does not match PoA constraint",
+				})
+			}
+		}
+	}
+
+	// Check resource_id constraint (generic ID)
+	if constraintConfig.EnforceResourceID {
+		if resourceID, ok := constraints["resource_id"]; ok {
+			actualID := getRequestValue("resource_id", pathID, queryParams, bodyData)
+			if !matchConstraint(resourceID, actualID) {
+				violations = append(violations, ConstraintViolation{
+					Field:    "resource_id",
+					Expected: resourceID,
+					Actual:   actualID,
+					Message:  "resource_id in request does not match PoA constraint",
+				})
+			}
+		}
+	}
+
+	// Check amount constraint
+	if constraintConfig.EnforceAmount {
+		if maxAmount, ok := constraints["max_amount"]; ok {
+			actualAmount := getNumericValue("amount", queryParams, bodyData)
+			if actualAmount > 0 {
+				maxVal := toFloat64(maxAmount)
+				if actualAmount > maxVal {
+					violations = append(violations, ConstraintViolation{
+						Field:    "max_amount",
+						Expected: maxAmount,
+						Actual:   actualAmount,
+						Message:  fmt.Sprintf("amount %.2f exceeds max_amount %.2f", actualAmount, maxVal),
+					})
+				}
+			}
+		}
+	}
+
+	// Check read_only constraint
+	if readOnly, ok := constraints["read_only"].(bool); ok && readOnly {
+		if r.Method != "GET" && r.Method != "HEAD" && r.Method != "OPTIONS" {
+			violations = append(violations, ConstraintViolation{
+				Field:    "read_only",
+				Expected: true,
+				Actual:   r.Method,
+				Message:  fmt.Sprintf("read_only constraint violated by %s method", r.Method),
+			})
+		}
+	}
+
+	// Check allowed_methods constraint
+	if allowedMethods, ok := constraints["allowed_methods"].([]interface{}); ok {
+		methodAllowed := false
+		for _, m := range allowedMethods {
+			if mStr, ok := m.(string); ok && strings.EqualFold(mStr, r.Method) {
+				methodAllowed = true
+				break
+			}
+		}
+		if !methodAllowed {
+			violations = append(violations, ConstraintViolation{
+				Field:    "allowed_methods",
+				Expected: allowedMethods,
+				Actual:   r.Method,
+				Message:  fmt.Sprintf("method %s not in allowed_methods", r.Method),
+			})
+		}
+	}
+
+	// Check path_prefix constraint
+	if pathPrefix, ok := constraints["path_prefix"].(string); ok {
+		if !strings.HasPrefix(r.URL.Path, pathPrefix) {
+			violations = append(violations, ConstraintViolation{
+				Field:    "path_prefix",
+				Expected: pathPrefix,
+				Actual:   r.URL.Path,
+				Message:  fmt.Sprintf("request path does not match prefix %s", pathPrefix),
+			})
+		}
+	}
+
+	// Custom constraints
+	for _, key := range constraintConfig.CustomConstraints {
+		if expected, ok := constraints[key]; ok {
+			actual := getRequestValue(key, "", queryParams, bodyData)
+			if !matchConstraint(expected, actual) {
+				violations = append(violations, ConstraintViolation{
+					Field:    key,
+					Expected: expected,
+					Actual:   actual,
+					Message:  fmt.Sprintf("custom constraint %s not satisfied", key),
+				})
+			}
+		}
+	}
+
+	return violations
+}
+
+// getRequestValue tries to extract a value from path, query, or body
+func getRequestValue(key, pathID string, query url.Values, body map[string]interface{}) interface{} {
+	// Check query parameters first
+	if v := query.Get(key); v != "" {
+		return v
+	}
+	// Check common ID variations
+	if key == "contact_id" || key == "resource_id" {
+		if v := query.Get("id"); v != "" {
+			return v
+		}
+		if pathID != "" {
+			return pathID
+		}
+	}
+	// Check body
+	if body != nil {
+		if v, ok := body[key]; ok {
+			return v
+		}
+		// Nested check for common patterns
+		if key == "contact_id" {
+			if v, ok := body["contactId"]; ok {
+				return v
+			}
+			if v, ok := body["id"]; ok {
+				return v
+			}
+		}
+	}
+	return nil
+}
+
+// getNumericValue extracts a numeric value from query or body
+func getNumericValue(key string, query url.Values, body map[string]interface{}) float64 {
+	// Check query
+	if v := query.Get(key); v != "" {
+		var f float64
+		fmt.Sscanf(v, "%f", &f)
+		return f
+	}
+	// Check body
+	if body != nil {
+		if v, ok := body[key]; ok {
+			return toFloat64(v)
+		}
+	}
+	return 0
+}
+
+// toFloat64 converts an interface to float64
+func toFloat64(v interface{}) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case string:
+		var f float64
+		fmt.Sscanf(n, "%f", &f)
+		return f
+	default:
+		return 0
+	}
+}
+
+// matchConstraint compares expected and actual values
+func matchConstraint(expected, actual interface{}) bool {
+	if actual == nil {
+		return false
+	}
+	// String comparison (case-insensitive for IDs)
+	expectedStr := fmt.Sprintf("%v", expected)
+	actualStr := fmt.Sprintf("%v", actual)
+	return strings.EqualFold(expectedStr, actualStr)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Platform ↔ SPIFFE identity binding
 // Validates that platform OIDC sub claim maps to caller's SPIFFE ID
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1997,6 +2243,19 @@ func main() {
 			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: "action_mismatch", Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
 			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
 			http.Error(w, "PoA action mismatch", http.StatusForbidden)
+			return
+		}
+
+		// Constraint enforcement: validate request matches PoA constraints
+		if violations := ValidateConstraints(claims.Con, r, bodyBytes); len(violations) > 0 {
+			violationDetails := make([]string, len(violations))
+			for i, v := range violations {
+				violationDetails[i] = v.Message
+			}
+			reason := "constraint_violation:" + strings.Join(violationDetails, "; ")
+			audit(AuditEvent{Timestamp: start, RequestID: reqID, MandateID: claims.ID, AgentIdentity: agentSPIFFE, PlatformIdentity: platformID, Action: claims.Act, Constraints: claims.Con, Decision: "deny", Reason: reason, Target: targetURL.String(), Method: r.Method, Path: r.URL.Path})
+			brokerRequestsTotal.WithLabelValues("deny", claims.Act).Inc()
+			http.Error(w, "PoA constraint violation: "+violationDetails[0], http.StatusForbidden)
 			return
 		}
 
