@@ -142,14 +142,6 @@ export async function fetchRequestsTimeSeries(): Promise<Array<{ timestamp: stri
 // Approval workflow API functions
 
 function generateMockApprovals(): ApprovalRequest[] {
-  const actions = [
-    'sap.vendor.bank_change',
-    'sap.payment.approve',
-    'salesforce.refund.process',
-    'sap.journal.post',
-    'crm.opportunity.close',
-  ];
-
   return [
     {
       id: 'apr_001',
