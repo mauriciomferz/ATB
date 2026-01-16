@@ -142,7 +142,9 @@ cd atb-gateway-go && go test -v -race ./... && cd ..
 | **Enterprise Actions** | Add new action definitions to OPA policy |
 | **Connector Adapters** | New backend system integrations          |
 | **Audit Sink Drivers** | Additional immutable storage backends    |
-| **Platform Bindings**  | Support for additional agent platforms   |
+| **Platform SDKs**      | Python connectors for AI platforms (see `sdk/python/atb/platforms/`) |
+| **Policy Templates**   | Pre-built OPA policies for enterprise systems (see `opa/policy/templates/`) |
+| **Dashboard Features** | React UI enhancements for approvals and monitoring |
 
 ### Good First Issues
 
@@ -204,6 +206,79 @@ Examples:
 | **Medium** | Data mutations, limited scope, non-bulk operations            |
 | **High**   | Bulk data, PII, financial > $10k, privileged access, OT/SCADA |
 
+## Platform SDK Contribution Guide
+
+### Adding a New Platform Connector
+
+Platform connectors live in `sdk/python/atb/platforms/`. To add a new platform:
+
+1. Create a new file `sdk/python/atb/platforms/your_platform.py`
+2. Extend the `PlatformConnector` base class:
+
+```python
+from atb.platforms.base import PlatformConnector, PlatformIdentity, ActionResult
+
+class YourPlatformConnector(PlatformConnector):
+    async def authenticate(self) -> PlatformIdentity:
+        # Implement platform authentication
+        pass
+    
+    async def execute_action(self, action: str, parameters: dict) -> ActionResult:
+        # Implement action execution with ATB authorization
+        pass
+    
+    def get_spiffe_id(self, identity: PlatformIdentity) -> str:
+        # Map platform identity to SPIFFE ID
+        pass
+```
+
+3. Add to `sdk/python/atb/platforms/__init__.py`
+4. Document in `sdk/python/README.md`
+
+### Existing Platform Connectors
+
+| Platform | File | Use Case |
+|----------|------|----------|
+| Microsoft Copilot | `copilot.py` | Entra ID, Graph API |
+| Salesforce | `salesforce.py` | Agentforce, CRM |
+| SAP | `sap.py` | Joule, S/4HANA |
+
+## Policy Template Contribution Guide
+
+### Adding New Policy Templates
+
+Policy templates live in `opa/policy/templates/`. To add a new template:
+
+1. Create `opa/policy/templates/your_platform.rego`:
+
+```rego
+package atb.templates.your_platform
+
+import rego.v1
+
+# Define risk classifications
+your_high_risk_actions := {"your.action.critical"}
+your_medium_risk_actions := {"your.action.update"}
+your_low_risk_actions := {"your.action.read"}
+
+# Export risk_tier
+default risk_tier := "UNKNOWN"
+risk_tier := "HIGH" if { input.act in your_high_risk_actions }
+risk_tier := "MEDIUM" if { input.act in your_medium_risk_actions }
+risk_tier := "LOW" if { input.act in your_low_risk_actions }
+
+# Export deny rules
+deny contains msg if {
+    input.act in your_high_risk_actions
+    not has_dual_control
+    msg := "High risk action requires dual control"
+}
+```
+
+2. Create test file `opa/policy/templates/your_platform_test.rego`
+3. Run tests: `opa test opa/policy/templates/ -v --v0-compatible`
+4. Document in `opa/policy/templates/README.md`
+
 ## Go Code Contribution Guide
 
 ### Code Style
@@ -244,11 +319,17 @@ latencyHistogram.WithLabelValues("action").Observe(duration.Seconds())
 | Document                          | Purpose                         |
 | --------------------------------- | ------------------------------- |
 | `README.md`                       | Project overview and quickstart |
+| `docs/architecture.md`            | System design and components    |
+| `docs/getting-started.md`         | Quick start guide               |
 | `docs/k8s-quickstart.md`          | Kubernetes deployment guide     |
 | `docs/operating-model.md`         | Deployment and operations       |
 | `docs/enterprise-actions.md`      | Action catalog reference        |
 | `docs/audit.md`                   | Audit event format and sinks    |
 | `docs/requirements-compliance.md` | Compliance matrix               |
+| `sdk/python/README.md`            | Python SDK and platform connectors |
+| `dashboard/README.md`             | Dashboard UI and approval workflows |
+| `opa/policy/templates/README.md`  | Policy templates for SAP, Salesforce, OT |
+| `spire/ot/README.md`              | OT/Industrial Edge deployment   |
 | `SECURITY.md`                     | Security policy and controls    |
 | `CONTRIBUTING.md`                 | Contribution guidelines         |
 

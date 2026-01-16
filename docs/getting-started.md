@@ -192,12 +192,65 @@ Try the interactive demo to see risk tiers in action:
 make demo
 ```
 
+## Approval Dashboard
+
+ATB includes a web-based dashboard for monitoring and approving requests:
+
+```bash
+# Start the dashboard
+cd dashboard && npm install && npm run dev
+```
+
+Access at: http://localhost:3003
+
+### Dashboard Pages
+
+| Page | URL | Description |
+|------|-----|-------------|
+| Dashboard | `/` | Real-time metrics, charts, system health |
+| Audit Log | `/audit` | Searchable authorization event history |
+| Approvals | `/approvals` | Pending approval queue for high-risk actions |
+| Policies | `/policies` | OPA policy evaluation statistics |
+| Agents | `/agents` | Registered agent monitoring |
+
+### Using the Approvals Page
+
+1. Navigate to http://localhost:3003/approvals
+2. View pending requests with risk tier indicators
+3. Click a request to see full details
+4. Approve or Reject with immediate enforcement
+
+## Platform SDKs
+
+Use the Python SDK for pre-built platform integrations:
+
+```python
+from atb.platforms import CopilotConnector, SalesforceConnector, SAPConnector
+
+# Microsoft Copilot
+copilot = CopilotConnector(tenant_id="...", client_id="...", client_secret="...")
+identity = await copilot.authenticate()
+result = await copilot.execute_action("calendar:create", {"title": "Meeting"})
+
+# Salesforce Agentforce
+salesforce = SalesforceConnector(instance_url="https://yourorg.salesforce.com", ...)
+
+# SAP Joule
+sap = SAPConnector(instance_url="https://your-sap.s4hana.cloud.sap", ...)
+```
+
+See [Python SDK Documentation](../sdk/python/README.md) for details.
+
 ## Next Steps
 
 - [Architecture Guide](architecture.md) - Understand the system design
 - [API Reference](openapi.yaml) - Full API documentation
 - [Enterprise Actions](enterprise-actions.md) - Browse 145+ supported actions
 - [Kubernetes Deployment](k8s-quickstart.md) - Deploy to production
+- [Python SDK](../sdk/python/README.md) - Platform connectors for Copilot, Salesforce, SAP
+- [Dashboard](../dashboard/README.md) - Monitoring UI and approval workflows
+- [Policy Templates](../opa/policy/templates/README.md) - Pre-built OPA policies
+- [OT/Industrial Edge](../spire/ot/README.md) - TPM attestation for industrial devices
 
 ## Troubleshooting
 
