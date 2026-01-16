@@ -1,0 +1,43 @@
+{
+  "$comment": "Example OIDC federation configuration for ATB",
+  "providers": [
+    {
+      "name": "microsoft_entra",
+      "issuer": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+      "client_id": "your-atb-app-client-id",
+      "trust_domain": "atb.example.com",
+      "spiffe_prefix": "platform/entra",
+      "allowed_audiences": [
+        "api://atb-broker"
+      ]
+    },
+    {
+      "name": "salesforce",
+      "issuer": "https://login.salesforce.com",
+      "client_id": "your-salesforce-connected-app-id",
+      "trust_domain": "atb.example.com",
+      "spiffe_prefix": "platform/salesforce"
+    },
+    {
+      "name": "okta",
+      "issuer": "https://your-org.okta.com",
+      "client_id": "your-okta-app-id",
+      "jwks_endpoint": "https://your-org.okta.com/oauth2/v1/keys",
+      "trust_domain": "atb.example.com",
+      "spiffe_prefix": "platform/okta"
+    },
+    {
+      "name": "sap_ias",
+      "issuer": "https://your-tenant.accounts.ondemand.com",
+      "client_id": "your-sap-ias-app-id",
+      "trust_domain": "atb.example.com",
+      "spiffe_prefix": "platform/sap"
+    }
+  ],
+  "default_mapping": "tenant",
+  "mappings": {
+    "service-account-copilot@example.com": "spiffe://atb.example.com/agent/copilot-prod",
+    "service-account-finance@example.com": "spiffe://atb.example.com/agent/finance-bot"
+  },
+  "cache_ttl_seconds": 3600
+}

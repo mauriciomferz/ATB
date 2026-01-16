@@ -63,3 +63,36 @@ export interface SystemHealth {
     workloadCount: number;
   };
 }
+
+export interface ApprovalRequest {
+  id: string;
+  action: string;
+  agentSpiffeId: string;
+  requestedBy: string;
+  requestedAt: string;
+  expiresAt: string;
+  riskTier: 'LOW' | 'MEDIUM' | 'HIGH';
+  dualControlRequired: boolean;
+  approvalCount: number;
+  requiredApprovals: number;
+  constraints: Record<string, unknown>;
+  legalBasis: {
+    basis: string;
+    jurisdiction: string;
+    accountableParty: {
+      type: string;
+      id: string;
+    };
+  };
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+}
+
+export interface UserInfo {
+  id: string;
+  email: string;
+  displayName: string;
+  role: 'admin' | 'approver' | 'viewer';
+  department: string;
+  lastLogin: string;
+  approvalCount: number;
+}

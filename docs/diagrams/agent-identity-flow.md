@@ -15,7 +15,7 @@ flowchart TB
         POD["AI Agent Pod<br/>ns: ai-agents<br/>sa: sales-bot-sa"]
         SPIRE_AGENT["SPIRE Agent"]
         K8S_API["K8s API Server"]
-        
+
         POD -->|"1. Connect via Unix Socket"| SPIRE_AGENT
         SPIRE_AGENT -->|"2. Query: What pod is this?"| K8S_API
         K8S_API -->|"ns: ai-agents, sa: sales-bot-sa"| SPIRE_AGENT

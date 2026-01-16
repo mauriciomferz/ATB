@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OIDC Federation Configuration",
+  "description": "Configuration for OIDC identity provider federation with SPIFFE ID mapping",
+  "type": "object",
+  "properties": {
+    "providers": {
+      "type": "array",
+      "description": "List of configured OIDC identity providers",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable name for the provider",
+            "examples": ["microsoft_entra", "salesforce", "okta"]
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri",
+            "description": "OIDC issuer URL (must match 'iss' claim in tokens)"
+          },
+          "client_id": {
+            "type": "string",
+            "description": "Expected audience/client ID for token validation"
+          },
+          "jwks_endpoint": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional custom JWKS endpoint (defaults to issuer/.well-known/jwks.json)"
+          },
+          "trust_domain": {
+            "type": "string",
+            "description": "SPIFFE trust domain for mapped identities"
+          },
+          "spiffe_prefix": {
+            "type": "string",
+            "description": "Path prefix for generated SPIFFE IDs"
+          },
+          "allowed_audiences": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Additional allowed audience values"
+          }
+        },
+        "required": ["name", "issuer", "client_id", "trust_domain"]
+      }
+    },
+    "default_mapping": {
+      "type": "string",
+      "enum": ["exact", "tenant", "email"],
+      "description": "Default strategy for mapping platform identities to SPIFFE IDs"
+    },
+    "mappings": {
+      "type": "object",
+      "description": "Explicit subject-to-SPIFFE mappings",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^spiffe://"
+      }
+    },
+    "cache_ttl_seconds": {
+      "type": "integer",
+      "minimum": 60,
+      "description": "TTL for JWKS cache in seconds"
+    }
+  },
+  "required": ["providers"]
+}

@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPIFFE/SPIRE Complete Identity Lifecycle</title>
+    <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;800&family=Source+Code+Pro:wght@400;600;700&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --admin: #01579b;
+            --admin-bg: #e1f5fe;
+            --admin-glow: rgba(1, 87, 155, 0.4);
+            
+            --control: #fbc02d;
+            --control-bg: #fff9c4;
+            --control-glow: rgba(251, 192, 45, 0.4);
+            
+            --infra: #7b1fa2;
+            --infra-bg: #f3e5f5;
+            --infra-glow: rgba(123, 31, 162, 0.4);
+            
+            --workload: #2e7d32;
+            --workload-bg: #e8f5e9;
+            --workload-glow: rgba(46, 125, 50, 0.4);
+            
+            --target: #ef6c00;
+            --target-bg: #ffe0b2;
+            --target-glow: rgba(239, 108, 0, 0.4);
+            
+            --security: #455a64;
+            --security-bg: #eceff1;
+            
+            --dark: #0a0e1a;
+            --surface: #1a1f35;
+            --border: #2a3556;
+            --text: #e8eaf0;
+            --text-dim: #a0a8c0;
+            --accent: #3b82f6;
+            --accent-bright: #60a5fa;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Raleway', sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0f1428 100%);
+            color: var(--text);
+            overflow-x: hidden;
+            position: relative;
+            min-height: 100vh;
+        }
+
+        /* Animated starfield background */
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 4s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Gradient overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(1, 87, 155, 0.1), transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(251, 192, 45, 0.08), transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(123, 31, 162, 0.1), transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1900px;
+            margin: 0 auto;
+            padding: 80px 50px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 100px;
+            animation: fadeInDown 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        h1 {
+            font-family: 'Libre Baskerville', serif;
+            font-size: 5.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 25px;
+            letter-spacing: -0.02em;
+            animation: gradientShift 8s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .subtitle {
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1.3rem;
+            color: var(--text-dim);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            font-weight: 600;
+            text-shadow: 0 2px 10px rgba(59, 130, 246, 0.3);
+        }
+
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 340px;
+            gap: 35px;
+            margin-bottom: 50px;
+        }
+
+        /* Phase Card */
+        .phase {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 28px;
+            padding: 40px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: fadeInUp 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        .phase:hover {
+            transform: translateY(-12px);
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6);
+        }
+
+        .phase::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            opacity: 0.8;
+        }
+
+        .phase-1::before {
+            background: linear-gradient(90deg, var(--admin), var(--control));
+        }
+
+        .phase-2::before {
+            background: linear-gradient(90deg, var(--infra), var(--workload));
+        }
+
+        .phase-3::before {
+            background: linear-gradient(90deg, var(--target), #d84315);
+        }
+
+        /* Phase Header */
+        .phase-header {
+            margin-bottom: 35px;
+        }
+
+        .phase-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+            border-radius: 14px;
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #000;
+            margin-bottom: 15px;
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+        }
+
+        .phase-title {
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+            letter-spacing: 0.02em;
+        }
+
+        .phase-desc {
+            font-size: 0.95rem;
+            color: var(--text-dim);
+            font-weight: 400;
+        }
+
+        /* Component Cards */
+        .components {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .comp-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 2px solid;
+            border-radius: 18px;
+            padding: 25px;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .comp-card::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 18px;
+            opacity: 0;
+            transition: opacity 0.4s;
+            pointer-events: none;
+        }
+
+        .comp-card:hover {
+            transform: translateX(10px) scale(1.03);
+        }
+
+        .comp-card:hover::after {
+            opacity: 1;
+        }
+
+        .comp-admin {
+            border-color: var(--admin);
+            background: linear-gradient(135deg, rgba(1, 87, 155, 0.12), transparent);
+        }
+
+        .comp-admin::after {
+            box-shadow: 0 0 50px var(--admin-glow);
+        }
+
+        .comp-control {
+            border-color: var(--control);
+            background: linear-gradient(135deg, rgba(251, 192, 45, 0.12), transparent);
+        }
+
+        .comp-control::after {
+            box-shadow: 0 0 50px var(--control-glow);
+        }
+
+        .comp-infra {
+            border-color: var(--infra);
+            background: linear-gradient(135deg, rgba(123, 31, 162, 0.12), transparent);
+        }
+
+        .comp-infra::after {
+            box-shadow: 0 0 50px var(--infra-glow);
+        }
+
+        .comp-workload {
+            border-color: var(--workload);
+            background: linear-gradient(135deg, rgba(46, 125, 50, 0.12), transparent);
+        }
+
+        .comp-workload::after {
+            box-shadow: 0 0 50px var(--workload-glow);
+        }
+
+        .comp-target {
+            border-color: var(--target);
+            background: linear-gradient(135deg, rgba(239, 108, 0, 0.12), transparent);
+        }
+
+        .comp-target::after {
+            box-shadow: 0 0 50px var(--target-glow);
+        }
+
+        .comp-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+            line-height: 1;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
+        }
+
+        .comp-name {
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 10px;
+        }
+
+        .comp-desc {
+            font-size: 0.88rem;
+            color: var(--text-dim);
+            line-height: 1.7;
+        }
+
+        /* Flow Steps */
+        .flow-sequence {
+            margin-top: 30px;
+            padding: 25px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 16px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            padding: 15px;
+            margin-bottom: 12px;
+            background: rgba(59, 130, 246, 0.05);
+            border-left: 4px solid var(--accent);
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+
+        .flow-step:hover {
+            background: rgba(59, 130, 246, 0.12);
+            transform: translateX(8px);
+        }
+
+        .step-num {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Source Code Pro', monospace;
+            font-weight: 700;
+            font-size: 1rem;
+            color: #000;
+        }
+
+        .step-text {
+            flex: 1;
+            font-size: 0.92rem;
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .step-text strong {
+            color: var(--accent-bright);
+            font-weight: 600;
+        }
+
+        /* Connections */
+        .connection-arrow {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            color: var(--accent);
+            animation: pulse 2s ease-in-out infinite;
+            z-index: 10;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Security Sidebar */
+        .security-panel {
+            grid-row: 1 / 3;
+            background: linear-gradient(135deg, rgba(69, 90, 100, 0.2), rgba(69, 90, 100, 0.08));
+            border: 2px dashed var(--security);
+            border-radius: 28px;
+            padding: 40px;
+            position: sticky;
+            top: 40px;
+            animation: fadeInRight 1s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both;
+        }
+
+        .security-header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .security-header h3 {
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1.3rem;
+            color: var(--text);
+            margin-top: 10px;
+            font-weight: 700;
+        }
+
+        .shield-icon {
+            font-size: 4rem;
+            display: block;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 20px rgba(69, 90, 100, 0.6));
+        }
+
+        .protection-item {
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 18px;
+            transition: all 0.4s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .protection-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .protection-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.4);
+            transform: translateY(-5px);
+        }
+
+        .protection-item:hover::before {
+            opacity: 1;
+        }
+
+        .protection-icon {
+            font-size: 2.2rem;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .protection-title {
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--accent-bright);
+            margin-bottom: 10px;
+        }
+
+        .protection-desc {
+            font-size: 0.88rem;
+            color: var(--text-dim);
+            line-height: 1.7;
+        }
+
+        /* Special Callout */
+        .lifecycle-callout {
+            grid-column: 1 / 4;
+            background: linear-gradient(135deg, rgba(251, 192, 45, 0.15), rgba(239, 108, 0, 0.08));
+            border: 3px solid var(--control);
+            border-radius: 24px;
+            padding: 35px;
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 1s cubic-bezier(0.22, 1, 0.36, 1) 0.6s both;
+        }
+
+        .lifecycle-callout::before {
+            content: '⏱️';
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 5rem;
+            opacity: 0.1;
+        }
+
+        .callout-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .callout-header h3 {
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--control);
+        }
+
+        .callout-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .callout-step {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 14px;
+            padding: 20px;
+            border-left: 4px solid var(--control);
+        }
+
+        .callout-step-title {
+            font-family: 'Source Code Pro', monospace;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #ffd54f;
+            margin-bottom: 8px;
+        }
+
+        .callout-step-desc {
+            font-size: 0.88rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-60px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(60px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInRight {
+            from {
+                opacity: 0;
+                transform: translateX(60px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 1600px) {
+            .main-grid {
+                grid-template-columns: 1fr 1fr 340px;
+            }
+            
+            .phase-2 {
+                grid-column: 1 / 3;
+            }
+            
+            .lifecycle-callout {
+                grid-column: 1 / 3;
+            }
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .phase-2,
+            .lifecycle-callout {
+                grid-column: 1;
+            }
+            
+            .security-panel {
+                position: relative;
+                top: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 3.5rem;
+            }
+            
+            .container {
+                padding: 40px 20px;
+            }
+            
+            .phase {
+                padding: 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Starfield -->
+    <div class="stars" id="starfield"></div>
+
+    <div class="container">
+        <header>
+            <h1>SPIFFE/SPIRE<br/>Identity Lifecycle</h1>
+            <p class="subtitle">Complete Trust Architecture</p>
+        </header>
+
+        <div class="main-grid">
+            <!-- PHASE 1: SETUP -->
+            <div class="phase phase-1" style="animation-delay: 0.1s">
+                <div class="phase-header">
+                    <div class="phase-number">1</div>
+                    <div class="phase-title">ESTABLISH TRUST</div>
+                    <div class="phase-desc">One-Time Setup</div>
+                </div>
+
+                <div class="components">
+                    <div class="comp-card comp-admin">
+                        <div class="comp-icon">👤</div>
+                        <div class="comp-name">Security Admin</div>
+                        <div class="comp-desc">
+                            Defines identity policies via CLI or Terraform, establishing trust rules
+                        </div>
+                    </div>
+
+                    <div class="comp-card comp-control">
+                        <div class="comp-icon">🛡️</div>
+                        <div class="comp-name">SPIRE Server</div>
+                        <div class="comp-desc">
+                            Trust Anchor serving as root CA and policy registry for the entire system
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-sequence">
+                    <div class="flow-step">
+                        <div class="step-num">1</div>
+                        <div class="step-text">
+                            <strong>Register Selectors:</strong> Admin maps K8s attributes (namespace=ai, service-account=sales-bot) to SPIFFE IDs
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PHASE 2: ATTESTATION -->
+            <div class="phase phase-2" style="animation-delay: 0.2s">
+                <div class="phase-header">
+                    <div class="phase-number">2</div>
+                    <div class="phase-title">ATTESTATION BRIDGE</div>
+                    <div class="phase-desc">Runtime Identity Verification</div>
+                </div>
+
+                <div class="components">
+                    <div class="comp-card comp-infra">
+                        <div class="comp-icon">☸️</div>
+                        <div class="comp-name">K8s API Server</div>
+                        <div class="comp-desc">
+                            Source of truth providing pod metadata: UID, namespace, service account, labels
+                        </div>
+                    </div>
+
+                    <div class="comp-card comp-infra">
+                        <div class="comp-icon">🕵️</div>
+                        <div class="comp-name">SPIRE Agent</div>
+                        <div class="comp-desc">
+                            Local attestor (DaemonSet) verifying workload identity and issuing certificates
+                        </div>
+                    </div>
+
+                    <div class="comp-card comp-workload">
+                        <div class="comp-icon">🤖</div>
+                        <div class="comp-name">AI Agent Pod</div>
+                        <div class="comp-desc">
+                            Application workload starting identity-less, requesting SVID via Unix socket
+                        </div>
+                    </div>
+
+                    <div class="comp-card comp-workload">
+                        <div class="comp-icon">📜</div>
+                        <div class="comp-name">X.509 SVID</div>
+                        <div class="comp-desc">
+                            Short-lived certificate (spiffe://example.org/bot) valid for 10 minutes, memory-only
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-sequence">
+                    <div class="flow-step">
+                        <div class="step-num">2</div>
+                        <div class="step-text">
+                            <strong>Request:</strong> Pod asks "Who am I?" via Workload API (Unix socket)
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="step-num">3</div>
+                        <div class="step-text">
+                            <strong>Verify:</strong> SPIRE Agent confirms pod metadata with K8s API Server
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="step-num">4</div>
+                        <div class="step-text">
+                            <strong>Sign:</strong> Agent sends CSR to SPIRE Server for certificate signing
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="step-num">5</div>
+                        <div class="step-text">
+                            <strong>Deliver:</strong> X.509 SVID issued to pod memory (never disk)
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PHASE 3: CONSUMPTION -->
+            <div class="phase phase-3" style="animation-delay: 0.3s">
+                <div class="phase-header">
+                    <div class="phase-number">3</div>
+                    <div class="phase-title">SECURE ACCESS</div>
+                    <div class="phase-desc">mTLS Communication</div>
+                </div>
+
+                <div class="components">
+                    <div class="comp-card comp-target">
+                        <div class="comp-icon">🔐</div>
+                        <div class="comp-name">AgentAuth Proxy</div>
+                        <div class="comp-desc">
+                            mTLS termination gateway validating certificate signature, expiration, and identity
+                        </div>
+                    </div>
+
+                    <div class="comp-card comp-target">
+                        <div class="comp-icon">🧠</div>
+                        <div class="comp-name">LLM / Internal Data</div>
+                        <div class="comp-desc">
+                            Protected backend services receiving authenticated, encrypted requests
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-sequence">
+                    <div class="flow-step">
+                        <div class="step-num">6</div>
+                        <div class="step-text">
+                            <strong>mTLS Handshake:</strong> Pod presents X.509 SVID for mutual authentication and encryption
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECURITY SIDEBAR -->
+            <div class="security-panel">
+                <div class="security-header">
+                    <span class="shield-icon">🔒</span>
+                    <h3>Security Protections</h3>
+                </div>
+
+                <div class="protection-item">
+                    <div class="protection-icon">🚫</div>
+                    <div class="protection-title">No Static Keys</div>
+                    <div class="protection-desc">
+                        Zero API keys or passwords in code. Identity derived from cryptographic attestation.
+                    </div>
+                </div>
+
+                <div class="protection-item">
+                    <div class="protection-icon">⏱️</div>
+                    <div class="protection-title">Auto-Rotation</div>
+                    <div class="protection-desc">
+                        Certificates expire in 10 minutes with automatic renewal, limiting breach windows.
+                    </div>
+                </div>
+
+                <div class="protection-item">
+                    <div class="protection-icon">🧠</div>
+                    <div class="protection-title">RAM-Only Keys</div>
+                    <div class="protection-desc">
+                        Private keys stored exclusively in memory, never persisted to disk.
+                    </div>
+                </div>
+
+                <div class="protection-item">
+                    <div class="protection-icon">🔍</div>
+                    <div class="protection-title">Proven Identity</div>
+                    <div class="protection-desc">
+                        Identity verified by Kubernetes kernel through attestation, not self-claimed.
+                    </div>
+                </div>
+            </div>
+
+            <!-- LIFECYCLE CALLOUT -->
+            <div class="lifecycle-callout">
+                <div class="callout-header">
+                    <span style="font-size: 3rem;">⏱️</span>
+                    <h3>10-Minute Certificate Lifecycle</h3>
+                </div>
+
+                <div class="callout-grid">
+                    <div class="callout-step">
+                        <div class="callout-step-title">Boot → Request</div>
+                        <div class="callout-step-desc">
+                            Pod starts identity-less and immediately requests credentials via Unix socket
+                        </div>
+                    </div>
+
+                    <div class="callout-step">
+                        <div class="callout-step-title">Attest → Verify</div>
+                        <div class="callout-step-desc">
+                            SPIRE Agent confirms pod's DNA (UID, labels, service account) with K8s API
+                        </div>
+                    </div>
+
+                    <div class="callout-step">
+                        <div class="callout-step-title">Sign → Issue</div>
+                        <div class="callout-step-desc">
+                            SPIRE Server signs certificate and delivers to pod memory with 10-minute TTL
+                        </div>
+                    </div>
+
+                    <div class="callout-step">
+                        <div class="callout-step-title">Use → Rotate</div>
+                        <div class="callout-step-desc">
+                            Pod uses SVID for mTLS; certificate auto-rotates before expiration
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Create animated starfield
+        const starfield = document.getElementById('starfield');
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.width = (Math.random() * 3 + 1) + 'px';
+            star.style.height = star.style.width;
+            star.style.animationDelay = Math.random() * 4 + 's';
+            star.style.animationDuration = (Math.random() * 3 + 2) + 's';
+            starfield.appendChild(star);
+        }
+
+        // Stagger component animations
+        document.querySelectorAll('.comp-card').forEach((card, index) => {
+            card.style.animation = `fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) ${0.1 * index}s both`;
+        });
+
+        // Add 3D tilt effect on hover
+        document.querySelectorAll('.comp-card, .protection-item').forEach(card => {
+            card.addEventListener('mousemove', function(e) {
+                const rect = this.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                
+                const rotateX = (y - centerY) / 12;
+                const rotateY = (centerX - x) / 12;
+                
+                this.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-5px)`;
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = '';
+            });
+        });
+
+        // Subtle parallax effect
+        let ticking = false;
+        window.addEventListener('scroll', () => {
+            if (!ticking) {
+                window.requestAnimationFrame(() => {
+                    const scrolled = window.pageYOffset;
+                    document.querySelectorAll('.phase').forEach((phase, index) => {
+                        const speed = 0.2 + (index * 0.1);
+                        const yPos = -(scrolled * speed / 100);
+                        phase.style.transform = `translateY(${yPos}px)`;
+                    });
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        });
+    </script>
+</body>
+</html>

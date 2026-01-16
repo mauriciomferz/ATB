@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard';
 import AuditLog from './pages/AuditLog';
 import Policies from './pages/Policies';
 import Agents from './pages/Agents';
+import Approvals from './pages/Approvals';
 import TokenInspector from './pages/TokenInspector';
 import Settings from './pages/Settings';
 import Users from './pages/Users';
@@ -26,6 +27,7 @@ function App() {
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                   <NavLink to="/">Overview</NavLink>
                   <NavLink to="/audit">Audit Log</NavLink>
+                  <NavLink to="/approvals">Approvals</NavLink>
                   <NavLink to="/policies">Policies</NavLink>
                   <NavLink to="/agents">Agents</NavLink>
                   <NavLink to="/users">Users</NavLink>
@@ -46,6 +48,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/audit" element={<AuditLog />} />
+            <Route path="/approvals" element={<Approvals />} />
             <Route path="/policies" element={<Policies />} />
             <Route path="/agents" element={<Agents />} />
             <Route path="/users" element={<Users />} />

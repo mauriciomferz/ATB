@@ -1,4 +1,4 @@
-import type { AuditEvent, MetricsSummary, SystemHealth, AgentInfo, PolicyStats } from './types';
+import type { AuditEvent, MetricsSummary, SystemHealth, AgentInfo, PolicyStats, ApprovalRequest } from './types';
 
 const API_BASE = '/api';
 
@@ -136,5 +136,131 @@ export async function fetchRequestsTimeSeries(): Promise<Array<{ timestamp: stri
     }));
   }
   const res = await fetch(`${API_BASE}/metrics/requests`);
+  return res.json();
+}
+
+// Approval workflow API functions
+
+function generateMockApprovals(): ApprovalRequest[] {
+  const actions = [
+    'sap.vendor.bank_change',
+    'sap.payment.approve',
+    'salesforce.refund.process',
+    'sap.journal.post',
+    'crm.opportunity.close',
+  ];
+
+  return [
+    {
+      id: 'apr_001',
+      action: 'sap.vendor.bank_change',
+      agentSpiffeId: 'spiffe://atb.example/agent/finance-bot',
+      requestedBy: 'alice@example.com',
+      requestedAt: new Date(Date.now() - 300000).toISOString(),
+      expiresAt: new Date(Date.now() + 180000).toISOString(),
+      riskTier: 'HIGH',
+      dualControlRequired: true,
+      approvalCount: 1,
+      requiredApprovals: 2,
+      constraints: {
+        vendor_id: '1000',
+        max_amount: 50000,
+        currency: 'EUR',
+      },
+      legalBasis: {
+        basis: 'contract',
+        jurisdiction: 'DE',
+        accountableParty: {
+          type: 'human',
+          id: 'alice@example.com',
+        },
+      },
+      status: 'pending',
+    },
+    {
+      id: 'apr_002',
+      action: 'sap.payment.approve',
+      agentSpiffeId: 'spiffe://atb.example/agent/payment-processor',
+      requestedBy: 'bob@example.com',
+      requestedAt: new Date(Date.now() - 120000).toISOString(),
+      expiresAt: new Date(Date.now() + 240000).toISOString(),
+      riskTier: 'HIGH',
+      dualControlRequired: true,
+      approvalCount: 0,
+      requiredApprovals: 2,
+      constraints: {
+        payment_id: 'PAY-2026-001234',
+        amount: 25000,
+        currency: 'USD',
+      },
+      legalBasis: {
+        basis: 'contract',
+        jurisdiction: 'US',
+        accountableParty: {
+          type: 'human',
+          id: 'bob@example.com',
+        },
+      },
+      status: 'pending',
+    },
+    {
+      id: 'apr_003',
+      action: 'crm.opportunity.close',
+      agentSpiffeId: 'spiffe://atb.example/agent/copilot-prod',
+      requestedBy: 'carol@example.com',
+      requestedAt: new Date(Date.now() - 60000).toISOString(),
+      expiresAt: new Date(Date.now() + 300000).toISOString(),
+      riskTier: 'MEDIUM',
+      dualControlRequired: false,
+      approvalCount: 0,
+      requiredApprovals: 1,
+      constraints: {
+        opportunity_id: 'OPP-123456',
+        amount: 150000,
+        stage: 'Closed Won',
+      },
+      legalBasis: {
+        basis: 'legitimate_interest',
+        jurisdiction: 'GB',
+        accountableParty: {
+          type: 'human',
+          id: 'carol@example.com',
+        },
+      },
+      status: 'pending',
+    },
+  ];
+}
+
+export async function fetchPendingApprovals(): Promise<ApprovalRequest[]> {
+  if (MOCK_MODE) {
+    return generateMockApprovals();
+  }
+  const res = await fetch(`${API_BASE}/approvals/pending`);
+  return res.json();
+}
+
+export async function approveRequest(requestId: string): Promise<{ success: boolean }> {
+  if (MOCK_MODE) {
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return { success: true };
+  }
+  const res = await fetch(`${API_BASE}/approvals/${requestId}/approve`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
+export async function rejectRequest(requestId: string, reason: string): Promise<{ success: boolean }> {
+  if (MOCK_MODE) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return { success: true };
+  }
+  const res = await fetch(`${API_BASE}/approvals/${requestId}/reject`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
   return res.json();
 }

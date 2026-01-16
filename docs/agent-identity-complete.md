@@ -26,12 +26,12 @@ This guide explains how AI agents in ATB (Agent Trust Broker) obtain their crypt
 
 The identity issuance process has 4 main steps:
 
-| Step | Actor | Action |
-|------|-------|--------|
-| 0 | Admin | Registers workload entry in SPIRE Server |
-| 1 | Kubernetes | Starts agent pod with namespace/SA |
-| 2 | Agent | Calls SPIRE Workload API via Unix socket |
-| 3 | SPIRE Agent | Attests workload and issues X.509 certificate |
+| Step | Actor       | Action                                        |
+| ---- | ----------- | --------------------------------------------- |
+| 0    | Admin       | Registers workload entry in SPIRE Server      |
+| 1    | Kubernetes  | Starts agent pod with namespace/SA            |
+| 2    | Agent       | Calls SPIRE Workload API via Unix socket      |
+| 3    | SPIRE Agent | Attests workload and issues X.509 certificate |
 
 ---
 
@@ -49,12 +49,12 @@ spire-server entry create \
 
 **Parameters:**
 
-| Parameter | Value | Meaning |
-|-----------|-------|---------|
-| -spiffeID | spiffe://example.org/agent/sales-bot | Identity to issue |
-| -parentID | spiffe://...demo-cluster | Which SPIRE Agent can issue |
-| -selector k8s:ns:ai-agents | Kubernetes namespace | Pod must be here |
-| -selector k8s:sa:sales-bot-sa | ServiceAccount | Pod must use this |
+| Parameter                     | Value                                | Meaning                     |
+| ----------------------------- | ------------------------------------ | --------------------------- |
+| -spiffeID                     | spiffe://example.org/agent/sales-bot | Identity to issue           |
+| -parentID                     | spiffe://...demo-cluster             | Which SPIRE Agent can issue |
+| -selector k8s:ns:ai-agents    | Kubernetes namespace                 | Pod must be here            |
+| -selector k8s:sa:sales-bot-sa | ServiceAccount                       | Pod must use this           |
 
 **This creates a rule:** "Any pod in namespace `ai-agents` using ServiceAccount `sales-bot-sa` gets the SPIFFE ID `spiffe://example.org/agent/sales-bot`"
 
@@ -132,12 +132,12 @@ SPIRE Agent checks:
 
 ## Step 4: X.509-SVID Issued
 
-| Field | Value |
-|-------|-------|
+| Field                    | Value                                     |
+| ------------------------ | ----------------------------------------- |
 | Subject Alternative Name | URI: spiffe://example.org/agent/sales-bot |
-| Validity | 10 minutes (auto-renewed) |
-| Public Key | Ed25519 |
-| Private Key | In memory only (never on disk) |
+| Validity                 | 10 minutes (auto-renewed)                 |
+| Public Key               | Ed25519                                   |
+| Private Key              | In memory only (never on disk)            |
 
 ---
 
@@ -145,21 +145,21 @@ SPIRE Agent checks:
 
 ## Traditional vs SPIFFE Approach
 
-| Traditional | SPIFFE/SPIRE |
-|-------------|--------------|
-| API keys in env vars | No secrets to manage |
-| Manual rotation | Auto-rotated every 10 min |
-| Secrets can leak | Identity from attestation |
-| Anyone with secret = access | Must be right workload |
+| Traditional                 | SPIFFE/SPIRE              |
+| --------------------------- | ------------------------- |
+| API keys in env vars        | No secrets to manage      |
+| Manual rotation             | Auto-rotated every 10 min |
+| Secrets can leak            | Identity from attestation |
+| Anyone with secret = access | Must be right workload    |
 
 ## Attack Scenarios
 
-| Attack | Why It Fails |
-|--------|--------------|
-| Steal certificate | Expires in 10 minutes |
-| Copy to another machine | Private key in memory only |
+| Attack                         | Why It Fails                    |
+| ------------------------------ | ------------------------------- |
+| Steal certificate              | Expires in 10 minutes           |
+| Copy to another machine        | Private key in memory only      |
 | Impersonate from different pod | Attestation checks namespace/SA |
-| Create fake pod | Need K8s RBAC for namespace |
+| Create fake pod                | Need K8s RBAC for namespace     |
 
 ---
 
@@ -268,11 +268,11 @@ import os
 
 def main():
     socket = os.environ.get(
-        "SPIFFE_ENDPOINT_SOCKET", 
+        "SPIFFE_ENDPOINT_SOCKET",
         "unix:///run/spire/sockets/agent.sock"
     )
     source = X509Source(workload_api_addr=socket)
-    
+
     svid = source.svid
     print(f"I am: {svid.spiffe_id}")
     # Output: spiffe://example.org/agent/sales-bot
