@@ -151,7 +151,9 @@ class SAPConnector(PlatformConnector):
                     + " "
                     + payload.get("family_name", ""),
                     email=payload.get("email"),
-                    roles=payload.get("xs.system.attributes", {}).get("xs.rolecollections", []),
+                    roles=payload.get("xs.system.attributes", {}).get(
+                        "xs.rolecollections", []
+                    ),
                     raw_token=platform_token,
                 )
         except Exception:

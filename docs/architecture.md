@@ -79,6 +79,63 @@ Provides workload identity:
 - [spire/server/server.conf](../spire/server/server.conf) - SPIRE server config
 - [spire/agent/agent.conf](../spire/agent/agent.conf) - SPIRE agent config
 
+### 5. OIDC Federation (`atb-gateway-go/broker/oidc_federation.go`)
+
+Binds external IdP identities to SPIFFE:
+
+- **Entra ID** - Microsoft 365 / Copilot tokens
+- **Okta** - Enterprise SSO tokens  
+- **Salesforce** - Agentforce platform tokens
+- **SAP IAS** - S/4HANA / Joule tokens
+
+**Key Files:**
+
+- [broker/oidc_federation.go](../atb-gateway-go/broker/oidc_federation.go) - OIDC federator
+- [config/oidc-federation.example.json](../config/oidc-federation.example.json) - Provider config
+- [schemas/oidc-federation.schema.json](../schemas/oidc-federation.schema.json) - Config schema
+
+### 6. Platform SDKs (`sdk/python/atb/platforms/`)
+
+Pre-built connectors for enterprise AI platforms:
+
+- **CopilotConnector** - Microsoft Copilot / Graph API
+- **SalesforceConnector** - Salesforce Agentforce
+- **SAPConnector** - SAP Joule / S/4HANA
+
+**Key Files:**
+
+- [sdk/python/atb/platforms/base.py](../sdk/python/atb/platforms/base.py) - Base connector ABC
+- [sdk/python/atb/platforms/copilot.py](../sdk/python/atb/platforms/copilot.py) - Copilot integration
+- [sdk/python/atb/platforms/salesforce.py](../sdk/python/atb/platforms/salesforce.py) - Salesforce integration
+- [sdk/python/atb/platforms/sap.py](../sdk/python/atb/platforms/sap.py) - SAP integration
+
+### 7. OT/Industrial Edge (`spire/ot/`)
+
+TPM-based attestation for industrial environments:
+
+- **TPM DevID** - Hardware-rooted identity for PLCs/HMIs
+- **Nested SPIRE** - Site-level SPIRE servers with upstream federation
+- **Safety Bounds** - Constraint policies for setpoint limits
+
+**Key Files:**
+
+- [spire/ot/spire-agent-tpm.conf](../spire/ot/spire-agent-tpm.conf) - TPM attestation config
+- [spire/ot/spire-server-nested.conf](../spire/ot/spire-server-nested.conf) - Nested server config
+- [opa/policy/templates/ot.rego](../opa/policy/templates/ot.rego) - OT policy template
+
+### 8. Approval Dashboard (`dashboard/`)
+
+Human-in-the-loop approval interface:
+
+- Real-time pending approvals queue (10s polling)
+- Risk tier indicators for HIGH risk actions
+- Approve/Reject with immediate enforcement
+
+**Key Files:**
+
+- [dashboard/src/pages/Approvals.tsx](../dashboard/src/pages/Approvals.tsx) - Approval page
+- [dashboard/src/api.ts](../dashboard/src/api.ts) - API client with approval endpoints
+
 ## Request Flow
 
 ```
@@ -314,3 +371,7 @@ The [charts/atb/](../charts/atb/) Helm chart deploys:
 - [Enterprise Actions](enterprise-actions.md) - Action catalog
 - [Requirements Compliance](requirements-compliance.md) - Compliance mapping
 - [K8s Quickstart](k8s-quickstart.md) - Kubernetes deployment guide
+- [SPIFFE Integration](spiffe-integration.md) - Workload identity setup
+- [OT/Industrial Edge](../spire/ot/README.md) - TPM attestation and nested SPIRE
+- [Python SDK](../sdk/python/README.md) - Platform connectors and SDK usage
+- [Dashboard](../dashboard/README.md) - Monitoring and approval UI

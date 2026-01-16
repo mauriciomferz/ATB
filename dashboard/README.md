@@ -11,6 +11,7 @@ Real-time monitoring dashboard for the Agent Trust Broker.
 - **Policy Stats**: OPA policy evaluation metrics and success rates
 - **Agent Monitoring**: Track registered agents and their activity
 - **System Health**: Broker, OPA, and SPIRE component status
+- **Approval Workflows**: Human-in-the-loop approval queue for high-risk actions
 
 ## Quick Start
 
@@ -58,12 +59,41 @@ dashboard/
 │       ├── Dashboard.tsx # Overview with charts
 │       ├── AuditLog.tsx  # Event history
 │       ├── Policies.tsx  # Policy stats
-│       └── Agents.tsx    # Agent registry
+│       ├── Agents.tsx    # Agent registry
+│       └── Approvals.tsx # Approval workflow queue
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.js
 └── tsconfig.json
 ```
+
+## Approval Workflows
+
+The Approvals page (`/approvals`) provides a human-in-the-loop interface for reviewing high-risk actions:
+
+### Features
+
+- **Pending Queue**: Real-time list of actions awaiting approval (10s polling)
+- **Risk Tier Indicators**: Visual warnings for HIGH risk requests
+- **Request Details**: Full context including action, parameters, justification
+- **Approve/Reject**: Immediate enforcement via ATB broker API
+
+### Approval Flow
+
+1. Agent requests a HIGH or MEDIUM risk action
+2. ATB creates approval request and returns `pending` status
+3. Request appears in the Approvals dashboard
+4. Approver reviews and clicks Approve or Reject
+5. ATB broker processes the decision
+6. Agent receives final authorization result
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/approvals/pending` | GET | List pending approval requests |
+| `/v1/approvals/{id}/approve` | POST | Approve a request |
+| `/v1/approvals/{id}/reject` | POST | Reject a request |
 
 ## Tech Stack
 

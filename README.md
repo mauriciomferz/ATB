@@ -41,6 +41,10 @@ ATB provides a **single enforcement boundary** between AI agent platforms and en
 | **Semantic Guardrails**   | Prompt injection detection with external service support                               |
 | **Immutable Audit**       | Azure Blob/S3 Object Lock with hash-chain tamper evidence                              |
 | **Platform Binding**      | OIDC platform tokens bound to SPIFFE identities                                        |
+| **Platform SDKs**         | Pre-built connectors for Microsoft Copilot, Salesforce, SAP                            |
+| **Approval Workflows**    | Dashboard UI for human approval of high-risk actions                                   |
+| **IdP Federation**        | OIDC federation with Entra ID, Okta, Salesforce, SAP IAS                               |
+| **OT/Industrial Edge**    | TPM attestation for industrial devices, nested SPIRE for sites                         |
 
 ## Quick Start
 
@@ -153,6 +157,81 @@ The policy engine enforces:
 ```bash
 opa test opa/policy/ -v --v0-compatible
 ```
+
+### Policy Templates
+
+Pre-built policy templates for common enterprise platforms:
+
+| Template | Location | Use Case |
+|----------|----------|----------|
+| SAP | `opa/policy/templates/sap.rego` | Payments, vendor changes, journal entries |
+| Salesforce | `opa/policy/templates/salesforce.rego` | Opportunities, credits, contracts |
+| OT/Industrial | `opa/policy/templates/ot.rego` | PLC control, setpoints, safety overrides |
+
+## Platform SDKs
+
+Pre-built connectors for enterprise AI platforms:
+
+```python
+from atb.platforms import CopilotConnector, SalesforceConnector, SAPConnector
+
+# Microsoft Copilot / Entra ID
+copilot = CopilotConnector(
+    tenant_id="your-tenant",
+    client_id="your-client-id",
+    client_secret="your-secret"
+)
+identity = await copilot.authenticate()
+result = await copilot.execute_action("calendar:create", {...})
+
+# Salesforce Agentforce
+salesforce = SalesforceConnector(
+    instance_url="https://yourorg.salesforce.com",
+    client_id="your-client-id"
+)
+
+# SAP Joule / S/4HANA
+sap = SAPConnector(
+    instance_url="https://your-sap.s4hana.cloud.sap",
+    client_id="your-client-id"
+)
+```
+
+See [sdk/python/README.md](sdk/python/README.md) for complete documentation.
+
+## Approval Workflows
+
+The ATB Dashboard provides human-in-the-loop approval for high-risk actions:
+
+- **Real-time queue** - Pending approvals with 10s polling
+- **Risk tier indicators** - Visual warnings for high-risk requests
+- **Audit context** - Full action details, justification, constraints
+- **Approve/Reject** - Immediate enforcement via ATB broker
+
+Access the approvals page at: `http://localhost:3003/approvals`
+
+## IdP Federation
+
+ATB supports OIDC federation to bind platform identities to SPIFFE:
+
+| Provider | Token Endpoint | JWKS Endpoint |
+|----------|---------------|---------------|
+| Entra ID | `login.microsoftonline.com` | `login.microsoftonline.com/{tenant}/discovery/v2.0/keys` |
+| Okta | `{domain}/oauth2/default/v1/token` | `{domain}/oauth2/default/v1/keys` |
+| Salesforce | `login.salesforce.com/services/oauth2/token` | `login.salesforce.com/id/keys` |
+| SAP IAS | `{tenant}.accounts.ondemand.com/oauth2/token` | `{tenant}.accounts.ondemand.com/oauth2/certs` |
+
+Configure federation in `config/oidc-federation.example.json`.
+
+## OT/Industrial Edge
+
+ATB supports industrial environments with TPM attestation:
+
+- **TPM DevID** - Hardware-rooted identity for PLCs/HMIs
+- **Nested SPIRE** - Site-level SPIRE servers with upstream federation
+- **Safety bounds** - Constraint policies for setpoint limits
+
+See [spire/ot/README.md](spire/ot/README.md) for industrial deployment.
 
 ## Development
 

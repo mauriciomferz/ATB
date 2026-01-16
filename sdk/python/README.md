@@ -52,6 +52,185 @@ else:
 - **Human-in-the-Loop**: Built-in support for approval workflows
 - **Audit Logging**: All actions are logged for compliance
 - **Async Support**: Full async/await support for concurrent operations
+- **Platform Connectors**: Pre-built integrations for Microsoft Copilot, Salesforce, SAP
+
+## Platform Connectors
+
+The SDK includes pre-built connectors for enterprise AI platforms. Each connector handles platform-specific authentication, action mapping, and identity binding.
+
+### Microsoft Copilot (Entra ID)
+
+```python
+from atb.platforms import CopilotConnector
+
+# Initialize with Entra ID credentials
+copilot = CopilotConnector(
+    tenant_id="your-tenant-id",
+    client_id="your-client-id",
+    client_secret="your-client-secret"
+)
+
+# Authenticate and get platform identity
+identity = await copilot.authenticate()
+print(f"Authenticated as: {identity.platform_user_id}")
+print(f"SPIFFE ID: {identity.spiffe_id}")
+
+# Execute a Copilot action with ATB authorization
+result = await copilot.execute_action(
+    action="calendar:create",
+    parameters={
+        "title": "Team standup",
+        "attendees": ["alice@contoso.com"],
+        "start": "2024-01-15T09:00:00Z"
+    }
+)
+
+if result.success:
+    print(f"Action completed: {result.action_id}")
+else:
+    print(f"Action failed: {result.error}")
+```
+
+#### Supported Copilot Actions
+
+| Action | Risk Tier | Description |
+|--------|-----------|-------------|
+| `calendar:read` | LOW | Read calendar events |
+| `calendar:create` | MEDIUM | Create calendar events |
+| `mail:read` | LOW | Read emails |
+| `mail:send` | MEDIUM | Send emails |
+| `mail:delete` | HIGH | Delete emails |
+| `files:read` | LOW | Read files |
+| `files:write` | MEDIUM | Write files |
+| `files:delete` | HIGH | Delete files |
+| `teams:send_message` | LOW | Send Teams messages |
+| `teams:create_channel` | MEDIUM | Create Teams channels |
+
+### Salesforce Agentforce
+
+```python
+from atb.platforms import SalesforceConnector
+
+# Initialize with Salesforce OAuth credentials
+salesforce = SalesforceConnector(
+    instance_url="https://yourorg.salesforce.com",
+    client_id="your-connected-app-client-id",
+    client_secret="your-client-secret",
+    username="integration@yourorg.com",
+    password="password",
+    security_token="security-token"
+)
+
+# Authenticate
+identity = await salesforce.authenticate()
+
+# Execute Salesforce action
+result = await salesforce.execute_action(
+    action="opportunity:update",
+    parameters={
+        "opportunity_id": "006xxx",
+        "stage": "Closed Won",
+        "amount": 50000
+    }
+)
+```
+
+#### Supported Salesforce Actions
+
+| Action | Risk Tier | Description |
+|--------|-----------|-------------|
+| `account:read` | LOW | Read account data |
+| `account:create` | MEDIUM | Create accounts |
+| `opportunity:read` | LOW | Read opportunities |
+| `opportunity:create` | MEDIUM | Create opportunities |
+| `opportunity:update` | MEDIUM | Update opportunities |
+| `lead:create` | MEDIUM | Create leads |
+| `case:create` | LOW | Create support cases |
+| `report:export` | HIGH | Export reports (PII) |
+| `user:create` | HIGH | Create users |
+
+### SAP Joule (S/4HANA)
+
+```python
+from atb.platforms import SAPConnector
+
+# Initialize with SAP OAuth credentials
+sap = SAPConnector(
+    instance_url="https://your-sap.s4hana.cloud.sap",
+    client_id="your-client-id",
+    client_secret="your-client-secret",
+    token_url="https://your-tenant.authentication.sap.hana.ondemand.com/oauth/token"
+)
+
+# Authenticate
+identity = await sap.authenticate()
+
+# Execute SAP action
+result = await sap.execute_action(
+    action="payment:execute",
+    parameters={
+        "vendor_id": "VENDOR001",
+        "amount": 25000.00,
+        "currency": "EUR",
+        "payment_date": "2024-01-15"
+    }
+)
+```
+
+#### Supported SAP Actions
+
+| Action | Risk Tier | Description |
+|--------|-----------|-------------|
+| `material:read` | LOW | Read material master |
+| `material:create` | MEDIUM | Create materials |
+| `purchase_order:read` | LOW | Read purchase orders |
+| `purchase_order:create` | MEDIUM | Create purchase orders |
+| `purchase_order:approve` | MEDIUM | Approve purchase orders |
+| `vendor:read` | LOW | Read vendor data |
+| `vendor:create` | MEDIUM | Create vendors |
+| `vendor:bank_change` | HIGH | Change vendor bank details |
+| `payment:execute` | HIGH | Execute payments |
+| `journal:post` | HIGH | Post journal entries |
+
+### Custom Platform Connector
+
+You can create custom connectors by extending the base class:
+
+```python
+from atb.platforms.base import PlatformConnector, PlatformIdentity, ActionResult
+from dataclasses import dataclass
+
+class MyPlatformConnector(PlatformConnector):
+    def __init__(self, api_url: str, api_key: str):
+        self.api_url = api_url
+        self.api_key = api_key
+        
+    async def authenticate(self) -> PlatformIdentity:
+        # Implement platform authentication
+        return PlatformIdentity(
+            platform_id="my-platform",
+            platform_user_id="user@example.com",
+            spiffe_id="spiffe://example.com/agent/my-platform",
+            roles=["user"],
+            attributes={}
+        )
+    
+    async def execute_action(
+        self,
+        action: str,
+        parameters: dict
+    ) -> ActionResult:
+        # Implement action execution with ATB authorization
+        return ActionResult(
+            success=True,
+            action_id="action-123",
+            action=action,
+            result={"status": "completed"}
+        )
+    
+    def get_spiffe_id(self, identity: PlatformIdentity) -> str:
+        return f"spiffe://example.com/agent/my-platform/{identity.platform_user_id}"
+```
 
 ## API Reference
 
