@@ -1,5 +1,6 @@
 # SAP Policy Templates for ATB
 # Pre-built OPA policies for common SAP S/4HANA and Joule actions
+# SPDX-License-Identifier: Apache-2.0
 
 package atb.templates.sap
 
@@ -11,206 +12,129 @@ import rego.v1
 
 # HIGH risk actions - require dual control and manager approval
 sap_high_risk_actions := {
-	"sap.vendor.bank_change",
-	"sap.vendor.create",
-	"sap.payment.approve",
-	"sap.payment.release",
-	"sap.journal.post",
-	"sap.journal.reverse",
-	"sap.hcm.payroll.run",
-	"sap.hcm.compensation.change",
-	"sap.ariba.contract.approve",
-	"sap.ariba.sourcing.award",
-	"sap.po.release",
-	"sap.user.privilege.grant",
+    "sap.vendor.bank_change",
+    "sap.vendor.create",
+    "sap.payment.execute",
+    "sap.payment.approve",
+    "sap.payment.release",
+    "sap.journal.post",
+    "sap.journal.reverse",
+    "sap.hcm.payroll.run",
+    "sap.hcm.compensation.change",
+    "sap.ariba.contract.approve",
+    "sap.ariba.sourcing.award",
+    "sap.po.release",
+    "sap.user.privilege.grant",
 }
 
 # MEDIUM risk actions - require single approval
 sap_medium_risk_actions := {
-	"sap.vendor.update",
-	"sap.vendor.block",
-	"sap.po.create",
-	"sap.po.approve",
-	"sap.pr.approve",
-	"sap.gr.post",
-	"sap.ir.post",
-	"sap.material.create",
-	"sap.stock.transfer",
-	"sap.sd.order.create",
-	"sap.hcm.employee.update",
+    "sap.vendor.update",
+    "sap.vendor.block",
+    "sap.po.create",
+    "sap.po.approve",
+    "sap.pr.approve",
+    "sap.gr.post",
+    "sap.ir.post",
+    "sap.material.create",
+    "sap.stock.transfer",
+    "sap.sd.order.create",
+    "sap.hcm.employee.update",
 }
 
 # LOW risk actions - auto-approved with logging
 sap_low_risk_actions := {
-	"sap.vendor.read",
-	"sap.material.read",
-	"sap.stock.read",
-	"sap.order.read",
-	"sap.report.run",
-	"sap.hcm.employee.read",
-}
-
-# Determine risk tier for SAP actions
-sap_risk_tier := "HIGH" if input.poa.act in sap_high_risk_actions
-
-sap_risk_tier := "MEDIUM" if {
-	not input.poa.act in sap_high_risk_actions
-	input.poa.act in sap_medium_risk_actions
-}
-
-sap_risk_tier := "LOW" if {
-	not input.poa.act in sap_high_risk_actions
-	not input.poa.act in sap_medium_risk_actions
-	input.poa.act in sap_low_risk_actions
-}
-
-sap_risk_tier := "MEDIUM" if {
-	startswith(input.poa.act, "sap.")
-	not input.poa.act in sap_high_risk_actions
-	not input.poa.act in sap_medium_risk_actions
-	not input.poa.act in sap_low_risk_actions
+    "sap.vendor.read",
+    "sap.material.read",
+    "sap.stock.read",
+    "sap.order.read",
+    "sap.report.run",
+    "sap.hcm.employee.read",
 }
 
 # ==============================================================================
-# SAP Vendor Bank Change Policy (Critical BEC Prevention)
+# Risk Tier Calculation
 # ==============================================================================
 
-# Vendor bank changes are the #1 target for business email compromise
-vendor_bank_change_allowed if {
-	input.poa.act == "sap.vendor.bank_change"
+default risk_tier := "UNKNOWN"
 
-	# Must have dual control (2 approvers)
-	input.poa.con.dual_control == true
-	count(input.poa.leg.approvals) >= 2
-
-	# Approvers must be different people
-	approvers := {a.approver | some a in input.poa.leg.approvals}
-	count(approvers) >= 2
-
-	# Requestor cannot be an approver
-	requestor := input.poa.leg.accountable_party.id
-	not requestor in approvers
-
-	# Must have manager approval
-	has_manager_approval
-
-	# Time window check (request within business hours)
-	within_business_hours
+risk_tier := "HIGH" if {
+    input.act in sap_high_risk_actions
 }
 
-vendor_bank_change_denial_reason := "Vendor bank change requires dual control with 2 different approvers" if {
-	input.poa.act == "sap.vendor.bank_change"
-	not input.poa.con.dual_control == true
+risk_tier := "MEDIUM" if {
+    not input.act in sap_high_risk_actions
+    input.act in sap_medium_risk_actions
 }
 
-vendor_bank_change_denial_reason := "Vendor bank change requires manager approval" if {
-	input.poa.act == "sap.vendor.bank_change"
-	not has_manager_approval
+risk_tier := "LOW" if {
+    not input.act in sap_high_risk_actions
+    not input.act in sap_medium_risk_actions
+    input.act in sap_low_risk_actions
 }
 
 # ==============================================================================
-# SAP Payment Approval Policy
+# Deny Rules
 # ==============================================================================
 
-payment_approval_allowed if {
-	input.poa.act == "sap.payment.approve"
-
-	# Amount within authorized limit
-	amount := input.poa.con.max_amount
-	amount <= payment_limit_for_user
-
-	# Dual control for amounts over threshold
-	amount < 10000
+# Vendor bank change requires dual control (BEC prevention)
+deny contains msg if {
+    input.act == "sap.vendor.bank_change"
+    not has_dual_control
+    msg := "Vendor bank change requires dual control with 2 different approvers"
 }
 
-payment_approval_allowed if {
-	input.poa.act == "sap.payment.approve"
-
-	amount := input.poa.con.max_amount
-	amount >= 10000
-
-	# Amounts >= 10000 require dual control
-	input.poa.con.dual_control == true
-	count(input.poa.leg.approvals) >= 2
+# Payment execution has amount limit
+deny contains msg if {
+    input.act == "sap.payment.execute"
+    amount := object.get(input.con, "amount", 0)
+    amount > 1000000
+    msg := sprintf("Payment amount %v exceeds $1,000,000 limit", [amount])
 }
 
-payment_limit_for_user := 50000 if {
-	"sap.payment.manager" in input.poa.leg.accountable_party.roles
+# Payment execution requires dual control
+deny contains msg if {
+    input.act == "sap.payment.execute"
+    not has_dual_control
+    msg := "Payment execution requires dual control"
 }
 
-payment_limit_for_user := 10000 if {
-	"sap.payment.standard" in input.poa.leg.accountable_party.roles
-	not "sap.payment.manager" in input.poa.leg.accountable_party.roles
+# Journal posting has amount limit
+deny contains msg if {
+    input.act == "sap.journal.post"
+    amount := object.get(input.con, "amount", 0)
+    amount > 1000000
+    msg := sprintf("Journal amount %v exceeds $1,000,000 limit", [amount])
 }
 
-payment_limit_for_user := 1000 if {
-	not "sap.payment.manager" in input.poa.leg.accountable_party.roles
-	not "sap.payment.standard" in input.poa.leg.accountable_party.roles
+# Journal posting requires dual control
+deny contains msg if {
+    input.act == "sap.journal.post"
+    not has_dual_control
+    msg := "Journal posting requires dual control"
 }
 
-# ==============================================================================
-# SAP Journal Posting Policy
-# ==============================================================================
-
-journal_post_allowed if {
-	input.poa.act == "sap.journal.post"
-
-	# Document type must be valid
-	valid_doc_types := {"SA", "AB", "SK", "KR", "KZ", "DZ", "DA"}
-	input.poa.con.document_type in valid_doc_types
-
-	# Amount within limit
-	amount := input.poa.con.max_amount
-	amount <= 100000
-}
-
-journal_post_allowed if {
-	input.poa.act == "sap.journal.post"
-
-	# Large postings require dual control
-	amount := input.poa.con.max_amount
-	amount > 100000
-	input.poa.con.dual_control == true
-}
-
-# ==============================================================================
-# SAP Company Code Restrictions
-# ==============================================================================
-
-# Restrict actions to specific company codes based on user's authorization
-company_code_authorized if {
-	user_company_codes := data.sap.user_authorizations[input.poa.leg.accountable_party.id].company_codes
-	input.poa.con.company_code in user_company_codes
-}
-
-company_code_authorized if {
-	# If no company code in constraints, allow (will be checked by SAP)
-	not input.poa.con.company_code
+# All HIGH risk actions require dual control (generic rule)
+deny contains msg if {
+    input.act in sap_high_risk_actions
+    not has_dual_control
+    not input.act == "sap.vendor.bank_change"
+    not input.act == "sap.payment.execute"
+    not input.act == "sap.journal.post"
+    msg := sprintf("Action %s requires dual control", [input.act])
 }
 
 # ==============================================================================
 # Helper Functions
 # ==============================================================================
 
-has_manager_approval if {
-	some approval in input.poa.leg.approvals
-	approval.role == "manager"
+has_dual_control if {
+    input.con.dual_control == true
+    input.leg.dual_control.approvers
+    count(input.leg.dual_control.approvers) >= 2
 }
 
 has_manager_approval if {
-	some approval in input.poa.leg.approvals
-	endswith(approval.approver, "@management.example.com")
-}
-
-within_business_hours if {
-	# Extract hour from timestamp (simplified)
-	now_ns := time.now_ns()
-	[hour, _, _] := time.clock([now_ns, "Europe/Berlin"])
-	hour >= 8
-	hour < 18
-}
-
-within_business_hours if {
-	# Allow override for emergency
-	input.poa.con.emergency_override == true
+    some approver in input.leg.dual_control.approvers
+    approver.role == "manager"
 }
