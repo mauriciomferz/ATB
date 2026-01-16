@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from atb.client import ATBClient
-from atb.poa import PoA
 
 
 @dataclass
