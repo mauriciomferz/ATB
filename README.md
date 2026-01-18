@@ -162,11 +162,11 @@ opa test opa/policy/ -v --v0-compatible
 
 Pre-built policy templates for common enterprise platforms:
 
-| Template | Location | Use Case |
-|----------|----------|----------|
-| SAP | `opa/policy/templates/sap.rego` | Payments, vendor changes, journal entries |
-| Salesforce | `opa/policy/templates/salesforce.rego` | Opportunities, credits, contracts |
-| OT/Industrial | `opa/policy/templates/ot.rego` | PLC control, setpoints, safety overrides |
+| Template      | Location                               | Use Case                                  |
+| ------------- | -------------------------------------- | ----------------------------------------- |
+| SAP           | `opa/policy/templates/sap.rego`        | Payments, vendor changes, journal entries |
+| Salesforce    | `opa/policy/templates/salesforce.rego` | Opportunities, credits, contracts         |
+| OT/Industrial | `opa/policy/templates/ot.rego`         | PLC control, setpoints, safety overrides  |
 
 ## Platform SDKs
 
@@ -214,12 +214,12 @@ Access the approvals page at: `http://localhost:3003/approvals`
 
 ATB supports OIDC federation to bind platform identities to SPIFFE:
 
-| Provider | Token Endpoint | JWKS Endpoint |
-|----------|---------------|---------------|
-| Entra ID | `login.microsoftonline.com` | `login.microsoftonline.com/{tenant}/discovery/v2.0/keys` |
-| Okta | `{domain}/oauth2/default/v1/token` | `{domain}/oauth2/default/v1/keys` |
-| Salesforce | `login.salesforce.com/services/oauth2/token` | `login.salesforce.com/id/keys` |
-| SAP IAS | `{tenant}.accounts.ondemand.com/oauth2/token` | `{tenant}.accounts.ondemand.com/oauth2/certs` |
+| Provider   | Token Endpoint                                | JWKS Endpoint                                            |
+| ---------- | --------------------------------------------- | -------------------------------------------------------- |
+| Entra ID   | `login.microsoftonline.com`                   | `login.microsoftonline.com/{tenant}/discovery/v2.0/keys` |
+| Okta       | `{domain}/oauth2/default/v1/token`            | `{domain}/oauth2/default/v1/keys`                        |
+| Salesforce | `login.salesforce.com/services/oauth2/token`  | `login.salesforce.com/id/keys`                           |
+| SAP IAS    | `{tenant}.accounts.ondemand.com/oauth2/token` | `{tenant}.accounts.ondemand.com/oauth2/certs`            |
 
 Configure federation in `config/oidc-federation.example.json`.
 

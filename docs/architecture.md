@@ -84,7 +84,7 @@ Provides workload identity:
 Binds external IdP identities to SPIFFE:
 
 - **Entra ID** - Microsoft 365 / Copilot tokens
-- **Okta** - Enterprise SSO tokens  
+- **Okta** - Enterprise SSO tokens
 - **Salesforce** - Agentforce platform tokens
 - **SAP IAS** - S/4HANA / Joule tokens
 
@@ -190,25 +190,25 @@ The PoA token is a signed JWT mandate that authorizes a specific action:
 
 ### Token Claims
 
-| Claim | Description |
-|-------|-------------|
-| `sub` | SPIFFE ID of the agent |
+| Claim | Description                                         |
+| ----- | --------------------------------------------------- |
+| `sub` | SPIFFE ID of the agent                              |
 | `act` | Action being authorized (e.g., `sap.vendor.change`) |
-| `con` | Constraints (limits, conditions) |
-| `leg` | Legal basis with accountability chain |
-| `iat` | Issued at timestamp |
-| `exp` | Expiration timestamp |
-| `jti` | Unique token identifier |
+| `con` | Constraints (limits, conditions)                    |
+| `leg` | Legal basis with accountability chain               |
+| `iat` | Issued at timestamp                                 |
+| `exp` | Expiration timestamp                                |
+| `jti` | Unique token identifier                             |
 
 ## Risk Tiers
 
 ATB enforces three risk tiers based on the action being performed:
 
-| Tier | Authorization | Examples |
-|------|---------------|----------|
-| **LOW** | Auto-approved | Health checks, status reads, safe paths |
-| **MEDIUM** | Single approval | CRM updates, data modifications |
-| **HIGH** | Dual control | Financial transactions, bulk exports, privileged ops |
+| Tier       | Authorization   | Examples                                             |
+| ---------- | --------------- | ---------------------------------------------------- |
+| **LOW**    | Auto-approved   | Health checks, status reads, safe paths              |
+| **MEDIUM** | Single approval | CRM updates, data modifications                      |
+| **HIGH**   | Dual control    | Financial transactions, bulk exports, privileged ops |
 
 ### Risk Classification
 
@@ -256,8 +256,8 @@ Example with dual control for HIGH risk:
     },
     "dual_control": {
       "approvers": [
-        {"id": "bob@example.com", "timestamp": "2026-01-11T10:00:00Z"},
-        {"id": "carol@example.com", "timestamp": "2026-01-11T10:05:00Z"}
+        { "id": "bob@example.com", "timestamp": "2026-01-11T10:00:00Z" },
+        { "id": "carol@example.com", "timestamp": "2026-01-11T10:05:00Z" }
       ]
     }
   }

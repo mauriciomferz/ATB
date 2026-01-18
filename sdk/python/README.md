@@ -93,18 +93,18 @@ else:
 
 #### Supported Copilot Actions
 
-| Action | Risk Tier | Description |
-|--------|-----------|-------------|
-| `calendar:read` | LOW | Read calendar events |
-| `calendar:create` | MEDIUM | Create calendar events |
-| `mail:read` | LOW | Read emails |
-| `mail:send` | MEDIUM | Send emails |
-| `mail:delete` | HIGH | Delete emails |
-| `files:read` | LOW | Read files |
-| `files:write` | MEDIUM | Write files |
-| `files:delete` | HIGH | Delete files |
-| `teams:send_message` | LOW | Send Teams messages |
-| `teams:create_channel` | MEDIUM | Create Teams channels |
+| Action                 | Risk Tier | Description            |
+| ---------------------- | --------- | ---------------------- |
+| `calendar:read`        | LOW       | Read calendar events   |
+| `calendar:create`      | MEDIUM    | Create calendar events |
+| `mail:read`            | LOW       | Read emails            |
+| `mail:send`            | MEDIUM    | Send emails            |
+| `mail:delete`          | HIGH      | Delete emails          |
+| `files:read`           | LOW       | Read files             |
+| `files:write`          | MEDIUM    | Write files            |
+| `files:delete`         | HIGH      | Delete files           |
+| `teams:send_message`   | LOW       | Send Teams messages    |
+| `teams:create_channel` | MEDIUM    | Create Teams channels  |
 
 ### Salesforce Agentforce
 
@@ -137,17 +137,17 @@ result = await salesforce.execute_action(
 
 #### Supported Salesforce Actions
 
-| Action | Risk Tier | Description |
-|--------|-----------|-------------|
-| `account:read` | LOW | Read account data |
-| `account:create` | MEDIUM | Create accounts |
-| `opportunity:read` | LOW | Read opportunities |
-| `opportunity:create` | MEDIUM | Create opportunities |
-| `opportunity:update` | MEDIUM | Update opportunities |
-| `lead:create` | MEDIUM | Create leads |
-| `case:create` | LOW | Create support cases |
-| `report:export` | HIGH | Export reports (PII) |
-| `user:create` | HIGH | Create users |
+| Action               | Risk Tier | Description          |
+| -------------------- | --------- | -------------------- |
+| `account:read`       | LOW       | Read account data    |
+| `account:create`     | MEDIUM    | Create accounts      |
+| `opportunity:read`   | LOW       | Read opportunities   |
+| `opportunity:create` | MEDIUM    | Create opportunities |
+| `opportunity:update` | MEDIUM    | Update opportunities |
+| `lead:create`        | MEDIUM    | Create leads         |
+| `case:create`        | LOW       | Create support cases |
+| `report:export`      | HIGH      | Export reports (PII) |
+| `user:create`        | HIGH      | Create users         |
 
 ### SAP Joule (S/4HANA)
 
@@ -179,18 +179,18 @@ result = await sap.execute_action(
 
 #### Supported SAP Actions
 
-| Action | Risk Tier | Description |
-|--------|-----------|-------------|
-| `material:read` | LOW | Read material master |
-| `material:create` | MEDIUM | Create materials |
-| `purchase_order:read` | LOW | Read purchase orders |
-| `purchase_order:create` | MEDIUM | Create purchase orders |
-| `purchase_order:approve` | MEDIUM | Approve purchase orders |
-| `vendor:read` | LOW | Read vendor data |
-| `vendor:create` | MEDIUM | Create vendors |
-| `vendor:bank_change` | HIGH | Change vendor bank details |
-| `payment:execute` | HIGH | Execute payments |
-| `journal:post` | HIGH | Post journal entries |
+| Action                   | Risk Tier | Description                |
+| ------------------------ | --------- | -------------------------- |
+| `material:read`          | LOW       | Read material master       |
+| `material:create`        | MEDIUM    | Create materials           |
+| `purchase_order:read`    | LOW       | Read purchase orders       |
+| `purchase_order:create`  | MEDIUM    | Create purchase orders     |
+| `purchase_order:approve` | MEDIUM    | Approve purchase orders    |
+| `vendor:read`            | LOW       | Read vendor data           |
+| `vendor:create`          | MEDIUM    | Create vendors             |
+| `vendor:bank_change`     | HIGH      | Change vendor bank details |
+| `payment:execute`        | HIGH      | Execute payments           |
+| `journal:post`           | HIGH      | Post journal entries       |
 
 ### Custom Platform Connector
 
@@ -204,7 +204,7 @@ class MyPlatformConnector(PlatformConnector):
     def __init__(self, api_url: str, api_key: str):
         self.api_url = api_url
         self.api_key = api_key
-        
+
     async def authenticate(self) -> PlatformIdentity:
         # Implement platform authentication
         return PlatformIdentity(
@@ -214,7 +214,7 @@ class MyPlatformConnector(PlatformConnector):
             roles=["user"],
             attributes={}
         )
-    
+
     async def execute_action(
         self,
         action: str,
@@ -227,7 +227,7 @@ class MyPlatformConnector(PlatformConnector):
             action=action,
             result={"status": "completed"}
         )
-    
+
     def get_spiffe_id(self, identity: PlatformIdentity) -> str:
         return f"spiffe://example.com/agent/my-platform/{identity.platform_user_id}"
 ```
@@ -250,7 +250,7 @@ class ATBClient:
         timeout: float = 30.0,
     ):
         """Initialize ATB client with mTLS credentials."""
-        
+
     def authorize(
         self,
         action: Action,
@@ -258,7 +258,7 @@ class ATBClient:
         approvals: list[Approval] | None = None,
     ) -> AuthorizationResponse:
         """Request authorization for an action."""
-        
+
     async def authorize_async(
         self,
         action: Action,
@@ -266,7 +266,7 @@ class ATBClient:
         approvals: list[Approval] | None = None,
     ) -> AuthorizationResponse:
         """Async version of authorize."""
-        
+
     def get_token(
         self,
         action: Action,
@@ -347,7 +347,7 @@ response = client.authorize(
 if not response.allowed and response.requires_approval:
     # Get human approval (via your approval system)
     approval = get_human_approval(response.approval_request)
-    
+
     # Retry with approval
     response = client.authorize(
         action=Action(verb="modify", resource="config/feature-flags"),
@@ -364,19 +364,19 @@ from atb import ATBClient, Action
 
 async def main():
     client = ATBClient(...)
-    
+
     # Authorize multiple actions concurrently
     actions = [
         Action(verb="read", resource="metrics/cpu"),
         Action(verb="read", resource="metrics/memory"),
         Action(verb="read", resource="metrics/disk"),
     ]
-    
+
     responses = await asyncio.gather(*[
         client.authorize_async(action, reason="Collect system metrics")
         for action in actions
     ])
-    
+
     for action, response in zip(actions, responses):
         print(f"{action.resource}: {'✓' if response.allowed else '✗'}")
 
@@ -387,16 +387,16 @@ asyncio.run(main())
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ATB_BROKER_URL` | Broker service URL | - |
-| `ATB_AGENTAUTH_URL` | AgentAuth service URL | - |
-| `ATB_CERT_FILE` | Path to client certificate | - |
-| `ATB_KEY_FILE` | Path to client private key | - |
-| `ATB_CA_FILE` | Path to CA certificate | - |
-| `ATB_TIMEOUT` | Request timeout in seconds | `30` |
-| `ATB_RETRY_COUNT` | Number of retries | `3` |
-| `ATB_LOG_LEVEL` | Logging level | `INFO` |
+| Variable            | Description                | Default |
+| ------------------- | -------------------------- | ------- |
+| `ATB_BROKER_URL`    | Broker service URL         | -       |
+| `ATB_AGENTAUTH_URL` | AgentAuth service URL      | -       |
+| `ATB_CERT_FILE`     | Path to client certificate | -       |
+| `ATB_KEY_FILE`      | Path to client private key | -       |
+| `ATB_CA_FILE`       | Path to CA certificate     | -       |
+| `ATB_TIMEOUT`       | Request timeout in seconds | `30`    |
+| `ATB_RETRY_COUNT`   | Number of retries          | `3`     |
+| `ATB_LOG_LEVEL`     | Logging level              | `INFO`  |
 
 ### Using Environment Variables
 

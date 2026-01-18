@@ -33,8 +33,8 @@ The dashboard runs on http://localhost:3000 and proxies API requests to the ATB 
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
+| Variable       | Description    | Default                 |
+| -------------- | -------------- | ----------------------- |
 | `VITE_API_URL` | ATB Broker URL | `http://localhost:8080` |
 
 ### Mock Mode
@@ -89,11 +89,11 @@ The Approvals page (`/approvals`) provides a human-in-the-loop interface for rev
 
 ### API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/approvals/pending` | GET | List pending approval requests |
-| `/v1/approvals/{id}/approve` | POST | Approve a request |
-| `/v1/approvals/{id}/reject` | POST | Reject a request |
+| Endpoint                     | Method | Description                    |
+| ---------------------------- | ------ | ------------------------------ |
+| `/v1/approvals/pending`      | GET    | List pending approval requests |
+| `/v1/approvals/{id}/approve` | POST   | Approve a request              |
+| `/v1/approvals/{id}/reject`  | POST   | Reject a request               |
 
 ## Tech Stack
 
@@ -108,14 +108,14 @@ The Approvals page (`/approvals`) provides a human-in-the-loop interface for rev
 
 The dashboard expects these endpoints from the ATB broker:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /v1/audit` | Audit log entries |
-| `GET /v1/metrics/summary` | Metrics summary |
-| `GET /v1/metrics/requests` | Time series data |
-| `GET /v1/health` | System health status |
-| `GET /v1/agents` | Registered agents |
-| `GET /v1/policies/stats` | Policy statistics |
+| Endpoint                   | Description          |
+| -------------------------- | -------------------- |
+| `GET /v1/audit`            | Audit log entries    |
+| `GET /v1/metrics/summary`  | Metrics summary      |
+| `GET /v1/metrics/requests` | Time series data     |
+| `GET /v1/health`           | System health status |
+| `GET /v1/agents`           | Registered agents    |
+| `GET /v1/policies/stats`   | Policy statistics    |
 
 ## Deployment
 
@@ -153,10 +153,10 @@ spec:
         app: atb-dashboard
     spec:
       containers:
-      - name: dashboard
-        image: atb-dashboard:latest
-        ports:
-        - containerPort: 80
+        - name: dashboard
+          image: atb-dashboard:latest
+          ports:
+            - containerPort: 80
 ```
 
 ## License

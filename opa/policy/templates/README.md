@@ -4,11 +4,11 @@ Pre-built policy templates for enterprise platforms. These templates provide ris
 
 ## Available Templates
 
-| Template | File | Platform | Actions |
-|----------|------|----------|---------|
-| SAP | [sap.rego](sap.rego) | SAP S/4HANA, Joule | Payments, vendor changes, journal entries |
-| Salesforce | [salesforce.rego](salesforce.rego) | Salesforce, Agentforce | Opportunities, credits, contracts |
-| OT/Industrial | [ot.rego](ot.rego) | PLCs, HMIs, SCADA | Setpoints, controls, safety overrides |
+| Template      | File                               | Platform               | Actions                                   |
+| ------------- | ---------------------------------- | ---------------------- | ----------------------------------------- |
+| SAP           | [sap.rego](sap.rego)               | SAP S/4HANA, Joule     | Payments, vendor changes, journal entries |
+| Salesforce    | [salesforce.rego](salesforce.rego) | Salesforce, Agentforce | Opportunities, credits, contracts         |
+| OT/Industrial | [ot.rego](ot.rego)                 | PLCs, HMIs, SCADA      | Setpoints, controls, safety overrides     |
 
 ## SAP Template
 
@@ -16,13 +16,13 @@ High-risk financial operations requiring dual control:
 
 ### Actions
 
-| Action | Risk Tier | Constraints |
-|--------|-----------|-------------|
-| `sap.vendor.bank_change` | HIGH | Requires dual approvers, audit logging |
-| `sap.payment.execute` | HIGH | Max amount: $1,000,000 |
-| `sap.journal.post` | HIGH | Max amount: $1,000,000 |
-| `sap.material.create` | MEDIUM | Standard approval |
-| `sap.material.read` | LOW | Auto-approved |
+| Action                   | Risk Tier | Constraints                            |
+| ------------------------ | --------- | -------------------------------------- |
+| `sap.vendor.bank_change` | HIGH      | Requires dual approvers, audit logging |
+| `sap.payment.execute`    | HIGH      | Max amount: $1,000,000                 |
+| `sap.journal.post`       | HIGH      | Max amount: $1,000,000                 |
+| `sap.material.create`    | MEDIUM    | Standard approval                      |
+| `sap.material.read`      | LOW       | Auto-approved                          |
 
 ### Example Policy
 
@@ -47,14 +47,14 @@ CRM operations with PII protection:
 
 ### Actions
 
-| Action | Risk Tier | Constraints |
-|--------|-----------|-------------|
-| `salesforce.report.export` | HIGH | PII protection, dual control |
-| `salesforce.opportunity.close_won` | HIGH | > $100k requires dual approval |
-| `salesforce.credit.issue` | MEDIUM | Max: $10,000 |
-| `salesforce.refund.process` | MEDIUM | Max: $5,000 |
-| `salesforce.contract.terminate` | HIGH | Requires legal basis |
-| `salesforce.account.read` | LOW | Auto-approved |
+| Action                             | Risk Tier | Constraints                    |
+| ---------------------------------- | --------- | ------------------------------ |
+| `salesforce.report.export`         | HIGH      | PII protection, dual control   |
+| `salesforce.opportunity.close_won` | HIGH      | > $100k requires dual approval |
+| `salesforce.credit.issue`          | MEDIUM    | Max: $10,000                   |
+| `salesforce.refund.process`        | MEDIUM    | Max: $5,000                    |
+| `salesforce.contract.terminate`    | HIGH      | Requires legal basis           |
+| `salesforce.account.read`          | LOW       | Auto-approved                  |
 
 ### Example Policy
 
@@ -73,13 +73,13 @@ Safety-critical operations for industrial environments:
 
 ### Actions
 
-| Action | Risk Tier | Constraints |
-|--------|-----------|-------------|
-| `ot.plc.firmware_update` | HIGH | Requires maintenance window |
-| `ot.plc.logic_change` | HIGH | Dual control required |
-| `ot.hmi.setpoint_change` | MEDIUM | Within safety bounds |
-| `ot.scada.control_action` | MEDIUM | Standard approval |
-| `ot.plc.status_read` | LOW | Auto-approved |
+| Action                    | Risk Tier | Constraints                 |
+| ------------------------- | --------- | --------------------------- |
+| `ot.plc.firmware_update`  | HIGH      | Requires maintenance window |
+| `ot.plc.logic_change`     | HIGH      | Dual control required       |
+| `ot.hmi.setpoint_change`  | MEDIUM    | Within safety bounds        |
+| `ot.scada.control_action` | MEDIUM    | Standard approval           |
+| `ot.plc.status_read`      | LOW       | Auto-approved               |
 
 ### Safety Bounds
 

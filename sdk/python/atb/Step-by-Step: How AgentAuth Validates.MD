@@ -88,7 +88,9 @@ Step 9: PoA Token Structure
 The issued token looks like this:
 
 
-eyJhbGciOiJFZERTQSIsImtpZCI6IjJ0ZW56YksyOW5ySy1aNk9Id2xHeUtWbXNFcW04RUs5T042bVRVa3dfcTAiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJzcGlmZmU6Ly9leGFtcGxlLm9yZy9hZ2VudC9zYWxlcy1ib3QiLCJhY3QiOiJjcm0uY29udGFjdC5yZWFkIiwiY29uIjp7ImNvbnRhY3RfaWQiOiIxMjM0NSJ9LCJsZWciOnsiYmFzaXMiOiJjb250cmFjdCIsImp1cmlzZGljdGlvbiI6IlVTIiwiYWNjb3VudGFibGVfcGFydHkiOnsidHlwZSI6Imh1bWFuIiwiaWQiOiJ1c2VyQGV4YW1wbGUuY29tIn19LCJpc3MiOiJhdGItYWdlbnRhdXRoIiwiZXhwIjoxNzM2OTQ2NzAwLCJpYXQiOjE3MzY5NDY0MDAsImp0aSI6InBvYV94eXo3ODkifQ.<Ed25519 signature>
+eyJhbGciOiJFZERTQSIsImtpZCI6IjxrZXktaWQ+IiwidHlwIjoiSldUIn0.<header>.<signature>
+
+> **Note:** This is a placeholder format. Real tokens contain base64-encoded claims.
 Decoded payload:
 
 
@@ -97,7 +99,8 @@ Step 10: Agent Uses Token with Broker
 The agent includes the token when calling the Broker:
 
 
-curl -X GET http://broker:8080/api/contacts/12345 \  -H "Authorization: Bearer eyJhbGciOiJFZERTQSIs..."
+curl -X GET http://broker:8080/api/contacts/12345 \
+  -H "Authorization: Bearer $POA_TOKEN"
 Broker validates:
 
 

@@ -137,14 +137,14 @@ cd atb-gateway-go && go test -v -race ./... && cd ..
 
 ### High Priority
 
-| Area                   | Description                              |
-| ---------------------- | ---------------------------------------- |
-| **Enterprise Actions** | Add new action definitions to OPA policy |
-| **Connector Adapters** | New backend system integrations          |
-| **Audit Sink Drivers** | Additional immutable storage backends    |
-| **Platform SDKs**      | Python connectors for AI platforms (see `sdk/python/atb/platforms/`) |
+| Area                   | Description                                                                 |
+| ---------------------- | --------------------------------------------------------------------------- |
+| **Enterprise Actions** | Add new action definitions to OPA policy                                    |
+| **Connector Adapters** | New backend system integrations                                             |
+| **Audit Sink Drivers** | Additional immutable storage backends                                       |
+| **Platform SDKs**      | Python connectors for AI platforms (see `sdk/python/atb/platforms/`)        |
 | **Policy Templates**   | Pre-built OPA policies for enterprise systems (see `opa/policy/templates/`) |
-| **Dashboard Features** | React UI enhancements for approvals and monitoring |
+| **Dashboard Features** | React UI enhancements for approvals and monitoring                          |
 
 ### Good First Issues
 
@@ -222,11 +222,11 @@ class YourPlatformConnector(PlatformConnector):
     async def authenticate(self) -> PlatformIdentity:
         # Implement platform authentication
         pass
-    
+
     async def execute_action(self, action: str, parameters: dict) -> ActionResult:
         # Implement action execution with ATB authorization
         pass
-    
+
     def get_spiffe_id(self, identity: PlatformIdentity) -> str:
         # Map platform identity to SPIFFE ID
         pass
@@ -237,11 +237,11 @@ class YourPlatformConnector(PlatformConnector):
 
 ### Existing Platform Connectors
 
-| Platform | File | Use Case |
-|----------|------|----------|
-| Microsoft Copilot | `copilot.py` | Entra ID, Graph API |
-| Salesforce | `salesforce.py` | Agentforce, CRM |
-| SAP | `sap.py` | Joule, S/4HANA |
+| Platform          | File            | Use Case            |
+| ----------------- | --------------- | ------------------- |
+| Microsoft Copilot | `copilot.py`    | Entra ID, Graph API |
+| Salesforce        | `salesforce.py` | Agentforce, CRM     |
+| SAP               | `sap.py`        | Joule, S/4HANA      |
 
 ## Policy Template Contribution Guide
 
@@ -316,22 +316,22 @@ latencyHistogram.WithLabelValues("action").Observe(duration.Seconds())
 
 ### File Locations
 
-| Document                          | Purpose                         |
-| --------------------------------- | ------------------------------- |
-| `README.md`                       | Project overview and quickstart |
-| `docs/architecture.md`            | System design and components    |
-| `docs/getting-started.md`         | Quick start guide               |
-| `docs/k8s-quickstart.md`          | Kubernetes deployment guide     |
-| `docs/operating-model.md`         | Deployment and operations       |
-| `docs/enterprise-actions.md`      | Action catalog reference        |
-| `docs/audit.md`                   | Audit event format and sinks    |
-| `docs/requirements-compliance.md` | Compliance matrix               |
-| `sdk/python/README.md`            | Python SDK and platform connectors |
-| `dashboard/README.md`             | Dashboard UI and approval workflows |
+| Document                          | Purpose                                  |
+| --------------------------------- | ---------------------------------------- |
+| `README.md`                       | Project overview and quickstart          |
+| `docs/architecture.md`            | System design and components             |
+| `docs/getting-started.md`         | Quick start guide                        |
+| `docs/k8s-quickstart.md`          | Kubernetes deployment guide              |
+| `docs/operating-model.md`         | Deployment and operations                |
+| `docs/enterprise-actions.md`      | Action catalog reference                 |
+| `docs/audit.md`                   | Audit event format and sinks             |
+| `docs/requirements-compliance.md` | Compliance matrix                        |
+| `sdk/python/README.md`            | Python SDK and platform connectors       |
+| `dashboard/README.md`             | Dashboard UI and approval workflows      |
 | `opa/policy/templates/README.md`  | Policy templates for SAP, Salesforce, OT |
-| `spire/ot/README.md`              | OT/Industrial Edge deployment   |
-| `SECURITY.md`                     | Security policy and controls    |
-| `CONTRIBUTING.md`                 | Contribution guidelines         |
+| `spire/ot/README.md`              | OT/Industrial Edge deployment            |
+| `SECURITY.md`                     | Security policy and controls             |
+| `CONTRIBUTING.md`                 | Contribution guidelines                  |
 
 ### Style Guide
 

@@ -205,13 +205,13 @@ Access at: http://localhost:3003
 
 ### Dashboard Pages
 
-| Page | URL | Description |
-|------|-----|-------------|
-| Dashboard | `/` | Real-time metrics, charts, system health |
-| Audit Log | `/audit` | Searchable authorization event history |
+| Page      | URL          | Description                                  |
+| --------- | ------------ | -------------------------------------------- |
+| Dashboard | `/`          | Real-time metrics, charts, system health     |
+| Audit Log | `/audit`     | Searchable authorization event history       |
 | Approvals | `/approvals` | Pending approval queue for high-risk actions |
-| Policies | `/policies` | OPA policy evaluation statistics |
-| Agents | `/agents` | Registered agent monitoring |
+| Policies  | `/policies`  | OPA policy evaluation statistics             |
+| Agents    | `/agents`    | Registered agent monitoring                  |
 
 ### Using the Approvals Page
 
