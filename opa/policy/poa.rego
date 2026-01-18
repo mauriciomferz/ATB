@@ -1287,14 +1287,26 @@ action_allowed if {
 number_or_default(x, d) := n if {
 	is_number(x)
 	n := x
-} else := d
+}
+
+number_or_default(x, d) := d if {
+	not is_number(x)
+}
 
 bool_or_default(x, d) := b if {
 	is_boolean(x)
 	b := x
-} else := d
+}
+
+bool_or_default(x, d) := d if {
+	not is_boolean(x)
+}
 
 string_or_default(x, d) := s if {
 	is_string(x)
 	s := x
-} else := d
+}
+
+string_or_default(x, d) := d if {
+	not is_string(x)
+}
