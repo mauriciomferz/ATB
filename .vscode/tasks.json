@@ -18,7 +18,7 @@
         {
             "label": "Run OPA Tests",
             "type": "shell",
-            "command": "opa test opa/policy/ -v --v0-compatible",
+            "command": "opa test opa/policy/ -v",
             "group": "test",
             "presentation": {
                 "reveal": "always"
@@ -38,7 +38,7 @@
         {
             "label": "Start OPA Server",
             "type": "shell",
-            "command": "opa run --server --addr 127.0.0.1:8181 opa/policy/poa.rego",
+            "command": "opa run --server --addr 127.0.0.1:8181 opa/policy/",
             "isBackground": true,
             "presentation": {
                 "reveal": "always",
