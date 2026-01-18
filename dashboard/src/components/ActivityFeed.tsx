@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
 
 interface ActivityEvent {

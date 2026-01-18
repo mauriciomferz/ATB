@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAuditEvents } from '../api';
 import ActivityFeed from '../components/ActivityFeed';
-import { useSettings } from '../context/SettingsContext';
 
 interface ActivityEvent {
   id: string;
@@ -96,7 +95,6 @@ function generateMockEvent(): ActivityEvent {
 }
 
 export default function LiveActivity() {
-  const { settings } = useSettings();
   const queryClient = useQueryClient();
   const [isLive, setIsLive] = useState(true);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
