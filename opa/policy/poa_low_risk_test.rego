@@ -87,7 +87,8 @@ test_low_risk_safe_path_wrong_method if {
 		{"op": "replace", "path": "/request/path", "value": "/health"},
 		{"op": "replace", "path": "/request/method", "value": "POST"},
 	])
-	not decision.allow with input as inp
+	d := decision with input as inp
+	d.allow == false
 }
 
 # Test: wrong method for allowlisted action denied
@@ -96,5 +97,6 @@ test_low_risk_wrong_method_for_action if {
 		{"op": "replace", "path": "/request/action", "value": "reporting.dashboard.view"},
 		{"op": "replace", "path": "/request/method", "value": "DELETE"},
 	])
-	not decision.allow with input as inp
+	d := decision with input as inp
+	d.allow == false
 }

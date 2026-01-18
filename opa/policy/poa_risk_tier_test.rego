@@ -60,13 +60,15 @@ test_medium_risk_with_approval_allowed if {
 # Test: medium-risk without approval is denied
 test_medium_risk_without_approval_denied if {
 	inp := json.patch(medium_risk_base, [{"op": "remove", "path": "/poa/leg/approval"}])
-	not decision.allow with input as inp
+	d := decision with input as inp
+	d.allow == false
 }
 
 # Test: medium-risk with self-approval is denied
 test_medium_risk_self_approval_denied if {
 	inp := json.patch(medium_risk_base, [{"op": "replace", "path": "/poa/leg/approval/approver_id", "value": "spiffe://atb.example/agent/crm-agent"}])
-	not decision.allow with input as inp
+	d := decision with input as inp
+	d.allow == false
 }
 
 # Test: high-risk with dual control is allowed
@@ -78,13 +80,15 @@ test_high_risk_with_dual_control_allowed if {
 # Test: high-risk without dual control is denied
 test_high_risk_without_dual_control_denied if {
 	inp := json.patch(high_risk_base, [{"op": "remove", "path": "/poa/leg/dual_control"}])
-	not decision.allow with input as inp
+	d := decision with input as inp
+	d.allow == false
 }
 
 # Test: high-risk with only one approver is denied
 test_high_risk_single_approver_denied if {
 	inp := json.patch(high_risk_base, [{"op": "replace", "path": "/poa/leg/dual_control/approvers", "value": [{"id": "approver-a", "type": "manager"}]}])
-	not decision.allow with input as inp
+	d := decision with input as inp
+	d.allow == false
 }
 
 # Test: high-risk with requester as approver is denied
@@ -93,7 +97,8 @@ test_high_risk_self_approval_denied if {
 		{"id": "spiffe://atb.example/agent/export-agent", "type": "requester"},
 		{"id": "approver-b", "type": "manager"},
 	]}])
-	not decision.allow with input as inp
+	d := decision with input as inp
+	d.allow == false
 }
 
 # Test: low-risk action (not in medium or high list) is allowed without special approval
