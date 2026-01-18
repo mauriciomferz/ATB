@@ -33,12 +33,12 @@ base_input := {
 }
 
 # Test: valid leg allows request
-test_leg_valid_allows {
+test_leg_valid_allows if {
 	decision.allow with input as base_input
 }
 
 # Test: missing leg field entirely
-test_leg_missing_denies {
+test_leg_missing_denies if {
 	inp := json.patch(base_input, [{"op": "remove", "path": "/poa/leg"}])
 	d := decision with input as inp
 	d.allow == false
@@ -46,7 +46,7 @@ test_leg_missing_denies {
 }
 
 # Test: leg missing jurisdiction
-test_leg_missing_jurisdiction {
+test_leg_missing_jurisdiction if {
 	inp := json.patch(base_input, [{"op": "remove", "path": "/poa/leg/jurisdiction"}])
 	d := decision with input as inp
 	d.allow == false
@@ -54,7 +54,7 @@ test_leg_missing_jurisdiction {
 }
 
 # Test: leg empty jurisdiction
-test_leg_empty_jurisdiction {
+test_leg_empty_jurisdiction if {
 	inp := json.patch(base_input, [{"op": "replace", "path": "/poa/leg/jurisdiction", "value": ""}])
 	d := decision with input as inp
 	d.allow == false
@@ -62,7 +62,7 @@ test_leg_empty_jurisdiction {
 }
 
 # Test: leg missing accountable_party
-test_leg_missing_accountable_party {
+test_leg_missing_accountable_party if {
 	inp := json.patch(base_input, [{"op": "remove", "path": "/poa/leg/accountable_party"}])
 	d := decision with input as inp
 	d.allow == false
@@ -70,7 +70,7 @@ test_leg_missing_accountable_party {
 }
 
 # Test: leg accountable_party missing type
-test_leg_accountable_party_missing_type {
+test_leg_accountable_party_missing_type if {
 	inp := json.patch(base_input, [{"op": "remove", "path": "/poa/leg/accountable_party/type"}])
 	d := decision with input as inp
 	d.allow == false
@@ -78,7 +78,7 @@ test_leg_accountable_party_missing_type {
 }
 
 # Test: leg accountable_party missing id
-test_leg_accountable_party_missing_id {
+test_leg_accountable_party_missing_id if {
 	inp := json.patch(base_input, [{"op": "remove", "path": "/poa/leg/accountable_party/id"}])
 	d := decision with input as inp
 	d.allow == false
@@ -86,7 +86,7 @@ test_leg_accountable_party_missing_id {
 }
 
 # Test: leg accountable_party empty id
-test_leg_accountable_party_empty_id {
+test_leg_accountable_party_empty_id if {
 	inp := json.patch(base_input, [{"op": "replace", "path": "/poa/leg/accountable_party/id", "value": ""}])
 	d := decision with input as inp
 	d.allow == false
@@ -94,7 +94,7 @@ test_leg_accountable_party_empty_id {
 }
 
 # Test: valid leg with optional fields (dual_control, approval_ref)
-test_leg_valid_with_optional_fields {
+test_leg_valid_with_optional_fields if {
 	inp := json.patch(base_input, [
 		{"op": "add", "path": "/poa/leg/approval_ref", "value": "SNOW-INC-001"},
 		{"op": "replace", "path": "/poa/leg/dual_control", "value": {
@@ -111,7 +111,7 @@ test_leg_valid_with_optional_fields {
 }
 
 # Test: GLOBAL jurisdiction is valid
-test_leg_global_jurisdiction {
+test_leg_global_jurisdiction if {
 	inp := json.patch(base_input, [{"op": "replace", "path": "/poa/leg/jurisdiction", "value": "GLOBAL"}])
 	decision.allow with input as inp
 }

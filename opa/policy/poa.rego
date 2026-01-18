@@ -27,7 +27,7 @@ default decision := {"allow": false, "reason": "deny_by_default"}
 # IMPORTANT: Treat this as a *policy choice*. The broker can still be configured
 # to require PoA for everything.
 
-max_ttl_seconds := v {
+max_ttl_seconds := v if {
 	v := input.policy.max_ttl_seconds
 	is_number(v)
 } else := 300
@@ -36,21 +36,21 @@ hard_cap_ttl_seconds := 900
 
 required_poa_fields := {"sub", "act", "con", "leg", "iat", "exp", "jti"}
 
-missing_required_fields[f] {
+missing_required_fields[f] if {
 	f := required_poa_fields[_]
 	not has_field(input.poa, f)
 }
 
-has_field(obj, f) {
+has_field(obj, f) if {
 	obj[f]
 }
 
-poa_provided {
+poa_provided if {
 	is_object(input.poa)
 	count(input.poa) > 0
 }
 
-req_action := v {
+req_action := v if {
 	v := input.request.action
 	is_string(v)
 	v != ""
@@ -89,66 +89,66 @@ poa_ttl := poa.exp - poa.iat
 platform_binding_mode := data.platform_binding.mode
 
 # No binding enforcement if mode is not set or is "none"
-platform_spiffe_binding_valid {
+platform_spiffe_binding_valid if {
 	not platform_binding_mode
 }
 
-platform_spiffe_binding_valid {
+platform_spiffe_binding_valid if {
 	platform_binding_mode == "none"
 }
 
 # Exact mode: platform sub must exactly match SPIFFE ID
-platform_spiffe_binding_valid {
+platform_spiffe_binding_valid if {
 	platform_binding_mode == "exact"
 	platform_sub == agent_spiffe
 }
 
 # Prefix mode: platform sub should appear in SPIFFE ID path
-platform_spiffe_binding_valid {
+platform_spiffe_binding_valid if {
 	platform_binding_mode == "prefix"
 	contains(agent_spiffe, concat("/", ["", platform_sub, ""]))
 }
 
-platform_spiffe_binding_valid {
+platform_spiffe_binding_valid if {
 	platform_binding_mode == "prefix"
 	endswith(agent_spiffe, concat("/", ["", platform_sub]))
 }
 
 # Mapping mode: lookup platform_sub -> SPIFFE pattern in data
-platform_spiffe_binding_valid {
+platform_spiffe_binding_valid if {
 	platform_binding_mode == "mapping"
 	pattern := data.platform_binding.mappings[platform_sub]
 	regex.match(pattern, agent_spiffe)
 }
 
-platform_binding_reason := reason {
+platform_binding_reason := reason if {
 	not platform_spiffe_binding_valid
 	reason := sprintf("platform_sub '%s' does not match SPIFFE ID '%s'", [platform_sub, agent_spiffe])
 }
 
 # TTL validity helpers
-ttl_valid {
+ttl_valid if {
 	poa_ttl > 0
 	poa_ttl <= hard_cap_ttl_seconds
 	poa_ttl <= max_ttl_seconds
 }
 
-ttl_invalid {
+ttl_invalid if {
 	poa_ttl <= 0
 }
 
-ttl_invalid {
+ttl_invalid if {
 	poa_ttl > hard_cap_ttl_seconds
 }
 
-ttl_invalid {
+ttl_invalid if {
 	poa_ttl > max_ttl_seconds
 }
 
 # Legal grounding (leg) validation
 # The leg claim must contain at minimum: jurisdiction (string) and accountable_party (object with type + id).
 
-leg_valid {
+leg_valid if {
 	is_object(leg)
 	is_string(leg.jurisdiction)
 	count(leg.jurisdiction) > 0
@@ -158,45 +158,45 @@ leg_valid {
 	count(leg.accountable_party.id) > 0
 }
 
-leg_missing_fields[f] {
+leg_missing_fields[f] if {
 	not is_object(leg)
 	f := "leg"
 }
 
-leg_missing_fields[f] {
+leg_missing_fields[f] if {
 	is_object(leg)
 	not is_string(leg.jurisdiction)
 	f := "leg.jurisdiction"
 }
 
-leg_missing_fields[f] {
+leg_missing_fields[f] if {
 	is_object(leg)
 	is_string(leg.jurisdiction)
 	count(leg.jurisdiction) == 0
 	f := "leg.jurisdiction"
 }
 
-leg_missing_fields[f] {
+leg_missing_fields[f] if {
 	is_object(leg)
 	not is_object(leg.accountable_party)
 	f := "leg.accountable_party"
 }
 
-leg_missing_fields[f] {
+leg_missing_fields[f] if {
 	is_object(leg)
 	is_object(leg.accountable_party)
 	not is_string(leg.accountable_party.type)
 	f := "leg.accountable_party.type"
 }
 
-leg_missing_fields[f] {
+leg_missing_fields[f] if {
 	is_object(leg)
 	is_object(leg.accountable_party)
 	not is_string(leg.accountable_party.id)
 	f := "leg.accountable_party.id"
 }
 
-leg_missing_fields[f] {
+leg_missing_fields[f] if {
 	is_object(leg)
 	is_object(leg.accountable_party)
 	is_string(leg.accountable_party.id)
@@ -207,17 +207,17 @@ leg_missing_fields[f] {
 # Main decision
 
 # No-PoA path: allow only low-risk activity.
-decision := {"allow": true, "reason": "allow_low_risk_without_poa"} {
+decision := {"allow": true, "reason": "allow_low_risk_without_poa"} if {
 	not poa_provided
 	low_risk_without_poa
 }
 
-decision := {"allow": false, "reason": "poa_required_for_action"} {
+decision := {"allow": false, "reason": "poa_required_for_action"} if {
 	not poa_provided
 	not low_risk_without_poa
 }
 
-decision := {"allow": true, "reason": "allow"} {
+decision := {"allow": true, "reason": "allow"} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
@@ -230,58 +230,58 @@ decision := {"allow": true, "reason": "allow"} {
 }
 
 # Risk tier approval check
-risk_tier_approved {
+risk_tier_approved if {
 	action_risk_tier == "low"
 }
 
-risk_tier_approved {
+risk_tier_approved if {
 	action_risk_tier == "medium"
 	medium_risk_approved
 }
 
-risk_tier_approved {
+risk_tier_approved if {
 	action_risk_tier == "high"
 	high_risk_approved
 }
 
 # Action matches request check (either no action requested or matches PoA)
-action_matches_request {
+action_matches_request if {
 	req_action == ""
 }
 
-action_matches_request {
+action_matches_request if {
 	req_action != ""
 	act == req_action
 }
 
 # More specific deny reasons (first-match style via else)
 
-decision := {"allow": false, "reason": "missing_required_fields"} {
+decision := {"allow": false, "reason": "missing_required_fields"} if {
 	poa_provided
 	count(missing_required_fields) > 0
-} else := {"allow": false, "reason": "leg_invalid", "details": leg_missing_fields} {
+} else := {"allow": false, "reason": "leg_invalid", "details": leg_missing_fields} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	not leg_valid
-} else := {"allow": false, "reason": "ttl_invalid"} {
+} else := {"allow": false, "reason": "ttl_invalid"} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
 	ttl_invalid
-} else := {"allow": false, "reason": "sub_mismatch"} {
+} else := {"allow": false, "reason": "sub_mismatch"} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
 	ttl_valid
 	poa.sub != agent_spiffe
-} else := {"allow": false, "reason": "platform_spiffe_binding_mismatch", "details": platform_binding_reason} {
+} else := {"allow": false, "reason": "platform_spiffe_binding_mismatch", "details": platform_binding_reason} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
 	ttl_valid
 	poa.sub == agent_spiffe
 	not platform_spiffe_binding_valid
-} else := {"allow": false, "reason": "action_mismatch"} {
+} else := {"allow": false, "reason": "action_mismatch"} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
@@ -290,7 +290,7 @@ decision := {"allow": false, "reason": "missing_required_fields"} {
 	platform_spiffe_binding_valid
 	req_action != ""
 	act != req_action
-} else := {"allow": false, "reason": "action_denied"} {
+} else := {"allow": false, "reason": "action_denied"} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
@@ -298,7 +298,7 @@ decision := {"allow": false, "reason": "missing_required_fields"} {
 	poa.sub == agent_spiffe
 	platform_spiffe_binding_valid
 	not action_allowed
-} else := {"allow": false, "reason": "medium_risk_approval_required", "details": {"tier": "medium", "action": act}} {
+} else := {"allow": false, "reason": "medium_risk_approval_required", "details": {"tier": "medium", "action": act}} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
@@ -308,7 +308,7 @@ decision := {"allow": false, "reason": "missing_required_fields"} {
 	action_allowed
 	is_medium_risk
 	not medium_risk_approved
-} else := {"allow": false, "reason": "high_risk_dual_control_required", "details": {"tier": "high", "action": act}} {
+} else := {"allow": false, "reason": "high_risk_dual_control_required", "details": {"tier": "high", "action": act}} if {
 	poa_provided
 	count(missing_required_fields) == 0
 	leg_valid
@@ -387,7 +387,7 @@ low_risk_allowlist := [
 	{"action": "teams.message.read", "methods": ["GET"]},
 ]
 
-low_risk_without_poa {
+low_risk_without_poa if {
 	# Match against explicit allowlist
 	some i
 	entry := low_risk_allowlist[i]
@@ -396,7 +396,7 @@ low_risk_without_poa {
 }
 
 # Fallback: allow GET on paths explicitly marked safe (e.g., /health, /ready, /metrics)
-low_risk_without_poa {
+low_risk_without_poa if {
 	input.request.method == "GET"
 	low_risk_path_patterns[_] == input.request.path
 }
@@ -555,17 +555,17 @@ high_risk_actions := [
 ]
 
 # Check if action is medium-risk
-is_medium_risk {
+is_medium_risk if {
 	medium_risk_actions[_] == act
 }
 
 # Check if action is high-risk
-is_high_risk {
+is_high_risk if {
 	high_risk_actions[_] == act
 }
 
 # Medium-risk validation: requires approval in leg claim
-medium_risk_approved {
+medium_risk_approved if {
 	is_medium_risk
 	is_object(leg.approval)
 	is_string(leg.approval.approver_id)
@@ -576,7 +576,7 @@ medium_risk_approved {
 }
 
 # High-risk validation: requires dual control (two distinct approvers)
-high_risk_approved {
+high_risk_approved if {
 	is_high_risk
 	is_object(leg.dual_control)
 	leg.dual_control.required == true
@@ -587,7 +587,7 @@ high_risk_approved {
 	all_approvers_distinct
 }
 
-all_approvers_distinct {
+all_approvers_distinct if {
 	approvers := leg.dual_control.approvers
 
 	# No approver is the same as the PoA subject
@@ -598,7 +598,7 @@ all_approvers_distinct {
 	count(unique_ids) >= 2
 }
 
-no_self_approval {
+no_self_approval if {
 	approvers := leg.dual_control.approvers
 
 	# Ensure no approver has the same ID as PoA subject
@@ -608,11 +608,11 @@ no_self_approval {
 # Action risk tier determination - using else chain to avoid multiple outputs
 default action_risk_tier := "low"
 
-action_risk_tier := "high" {
+action_risk_tier := "high" if {
 	is_high_risk
 }
 
-action_risk_tier := "medium" {
+action_risk_tier := "medium" if {
 	not is_high_risk
 	is_medium_risk
 }
@@ -622,7 +622,7 @@ action_risk_tier := "medium" {
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Low-risk allowlisted actions: always allowed with valid PoA
-action_allowed {
+action_allowed if {
 	low_risk_without_poa
 }
 
@@ -632,12 +632,12 @@ action_allowed {
 # Constraint: high-impact financial changes require dual control when amount > $5000
 # Constraint: liability_cap must exist and cover the amount
 
-action_allowed {
+action_allowed if {
 	act == "sap.vendor.change"
 	sap_vendor_change_allowed
 }
 
-sap_vendor_change_allowed {
+sap_vendor_change_allowed if {
 	amount := object.get(params, "amount", 0)
 	dual := object.get(constraints, "dual_control", false)
 	liability := object.get(constraints, "liability_cap", 0)
@@ -645,7 +645,7 @@ sap_vendor_change_allowed {
 	liability >= amount
 }
 
-sap_vendor_change_allowed {
+sap_vendor_change_allowed if {
 	amount := object.get(params, "amount", 0)
 	dual := object.get(constraints, "dual_control", false)
 	liability := object.get(constraints, "liability_cap", 0)
@@ -657,12 +657,12 @@ sap_vendor_change_allowed {
 # SAP Vendor Bank Change:
 # Constraint: requires second-channel verification flag
 
-action_allowed {
+action_allowed if {
 	act == "sap.vendor.bank_change"
 	sap_vendor_bank_change_allowed
 }
 
-sap_vendor_bank_change_allowed {
+sap_vendor_bank_change_allowed if {
 	# Must have second-channel verification (e.g., callback to vendor)
 	verified := bool_or_default(params.second_channel_verified, false)
 	verified == true
@@ -675,12 +675,12 @@ sap_vendor_bank_change_allowed {
 # SAP Payment Execute:
 # Constraint: amount limits based on payment type
 
-action_allowed {
+action_allowed if {
 	act == "sap.payment.execute"
 	sap_payment_execute_allowed
 }
 
-sap_payment_execute_allowed {
+sap_payment_execute_allowed if {
 	amount := number_or_default(params.amount, 0)
 	payment_type := string_or_default(params.payment_type, "standard")
 	limit := object.get(constraints, "payment_limit", 100000)
@@ -691,12 +691,12 @@ sap_payment_execute_allowed {
 # SAP Batch Payment Release:
 # Constraint: batch size and total amount limits
 
-action_allowed {
+action_allowed if {
 	act == "sap.payment.batch_release"
 	sap_batch_payment_allowed
 }
 
-sap_batch_payment_allowed {
+sap_batch_payment_allowed if {
 	batch_count := number_or_default(params.batch_count, 0)
 	total_amount := number_or_default(params.total_amount, 0)
 	max_batch := number_or_default(constraints.max_batch_count, 100)
@@ -709,12 +709,12 @@ sap_batch_payment_allowed {
 # SAP Journal Entry Post:
 # Constraint: must have valid GL account and cost center
 
-action_allowed {
+action_allowed if {
 	act == "sap.journal_entry.post"
 	sap_journal_entry_allowed
 }
 
-sap_journal_entry_allowed {
+sap_journal_entry_allowed if {
 	gl_account := string_or_default(params.gl_account, "")
 	cost_center := string_or_default(params.cost_center, "")
 	count(gl_account) > 0
@@ -730,12 +730,12 @@ sap_journal_entry_allowed {
 # Salesforce Bulk Export:
 # Constraint: dataset must be in allowlist, row limit enforced
 
-action_allowed {
+action_allowed if {
 	act == "salesforce.bulk.export"
 	salesforce_bulk_export_allowed
 }
 
-salesforce_bulk_export_allowed {
+salesforce_bulk_export_allowed if {
 	dataset := string_or_default(params.dataset, "")
 	rows := number_or_default(params.row_count, 0)
 	allowed := constraints.dataset_allowlist
@@ -749,12 +749,12 @@ salesforce_bulk_export_allowed {
 # Salesforce Bulk Delete:
 # Constraint: object type must be in deletable list, count limit
 
-action_allowed {
+action_allowed if {
 	act == "salesforce.bulk.delete"
 	salesforce_bulk_delete_allowed
 }
 
-salesforce_bulk_delete_allowed {
+salesforce_bulk_delete_allowed if {
 	object_type := string_or_default(params.object_type, "")
 	record_count := number_or_default(params.record_count, 0)
 	deletable := object.get(constraints, "deletable_objects", [])
@@ -768,12 +768,12 @@ salesforce_bulk_delete_allowed {
 # Salesforce Apex Execute:
 # Constraint: script must be in approved list
 
-action_allowed {
+action_allowed if {
 	act == "salesforce.apex.execute"
 	salesforce_apex_allowed
 }
 
-salesforce_apex_allowed {
+salesforce_apex_allowed if {
 	script_name := string_or_default(params.script_name, "")
 	approved_scripts := object.get(constraints, "approved_apex_scripts", [])
 	is_array(approved_scripts)
@@ -784,12 +784,12 @@ salesforce_apex_allowed {
 # Salesforce Report Export:
 # Constraint: report must be in exportable list
 
-action_allowed {
+action_allowed if {
 	act == "salesforce.report.export_all"
 	salesforce_report_export_allowed
 }
 
-salesforce_report_export_allowed {
+salesforce_report_export_allowed if {
 	report_id := string_or_default(params.report_id, "")
 	exportable := object.get(constraints, "exportable_reports", [])
 	is_array(exportable)
@@ -802,12 +802,12 @@ salesforce_report_export_allowed {
 # HR Employee PII Export:
 # Constraint: purpose must be specified, record limit enforced
 
-action_allowed {
+action_allowed if {
 	act == "hr.employee.export_pii"
 	hr_export_pii_allowed
 }
 
-hr_export_pii_allowed {
+hr_export_pii_allowed if {
 	purpose := string_or_default(params.purpose, "")
 	count(purpose) > 5
 
@@ -825,12 +825,12 @@ hr_export_pii_allowed {
 # HR Employee Terminate:
 # Constraint: must have offboarding checklist completed
 
-action_allowed {
+action_allowed if {
 	act == "hr.employee.terminate"
 	hr_terminate_allowed
 }
 
-hr_terminate_allowed {
+hr_terminate_allowed if {
 	checklist_complete := bool_or_default(params.offboarding_checklist_complete, false)
 	checklist_complete == true
 
@@ -842,12 +842,12 @@ hr_terminate_allowed {
 # HR Payroll Run:
 # Constraint: must be within scheduled window
 
-action_allowed {
+action_allowed if {
 	act == "hr.payroll.run"
 	hr_payroll_run_allowed
 }
 
-hr_payroll_run_allowed {
+hr_payroll_run_allowed if {
 	# Payroll period must be specified
 	period := string_or_default(params.payroll_period, "")
 	count(period) > 0
@@ -861,12 +861,12 @@ hr_payroll_run_allowed {
 # HR Compensation Change:
 # Constraint: percentage change limit, requires justification
 
-action_allowed {
+action_allowed if {
 	act == "hr.compensation.change"
 	hr_compensation_allowed
 }
 
-hr_compensation_allowed {
+hr_compensation_allowed if {
 	pct_change := number_or_default(params.percentage_change, 0)
 	max_pct := number_or_default(constraints.max_compensation_pct_change, 25)
 	pct_change <= max_pct
@@ -880,12 +880,12 @@ hr_compensation_allowed {
 # Customer Data Export (GDPR/CCPA):
 # Constraint: must have valid request reference
 
-action_allowed {
+action_allowed if {
 	act == "customer.gdpr.erasure"
 	customer_gdpr_erasure_allowed
 }
 
-customer_gdpr_erasure_allowed {
+customer_gdpr_erasure_allowed if {
 	request_id := string_or_default(params.request_id, "")
 	count(request_id) > 0
 
@@ -894,12 +894,12 @@ customer_gdpr_erasure_allowed {
 	days_since_request <= 30 # GDPR requires response within 30 days
 }
 
-action_allowed {
+action_allowed if {
 	act == "customer.ccpa.export"
 	customer_ccpa_export_allowed
 }
 
-customer_ccpa_export_allowed {
+customer_ccpa_export_allowed if {
 	request_id := string_or_default(params.request_id, "")
 	count(request_id) > 0
 
@@ -913,12 +913,12 @@ customer_ccpa_export_allowed {
 # Customer PII Access:
 # Constraint: purpose limitation
 
-action_allowed {
+action_allowed if {
 	act == "customer.pii.access"
 	customer_pii_access_allowed
 }
 
-customer_pii_access_allowed {
+customer_pii_access_allowed if {
 	purpose := string_or_default(params.purpose, "")
 	valid_purposes := ["support_case", "billing_inquiry", "identity_verification", "fraud_investigation"]
 	some i
@@ -934,12 +934,12 @@ customer_pii_access_allowed {
 # IAM Role Assign:
 # Constraint: role must be in assignable list, target user must be specified
 
-action_allowed {
+action_allowed if {
 	act == "iam.role.assign"
 	iam_role_assign_allowed
 }
 
-iam_role_assign_allowed {
+iam_role_assign_allowed if {
 	role := string_or_default(params.role_name, "")
 	target_user := string_or_default(params.target_user_id, "")
 	count(role) > 0
@@ -953,11 +953,11 @@ iam_role_assign_allowed {
 	role_allowed_or_unconstrained(role, assignable)
 }
 
-role_allowed_or_unconstrained(role, assignable) {
+role_allowed_or_unconstrained(role, assignable) if {
 	count(assignable) == 0 # No constraint = allow all
 }
 
-role_allowed_or_unconstrained(role, assignable) {
+role_allowed_or_unconstrained(role, assignable) if {
 	count(assignable) > 0
 	some i
 	assignable[i] == role
@@ -966,12 +966,12 @@ role_allowed_or_unconstrained(role, assignable) {
 # IAM MFA Disable:
 # Constraint: requires security incident reference
 
-action_allowed {
+action_allowed if {
 	act == "iam.mfa.disable"
 	iam_mfa_disable_allowed
 }
 
-iam_mfa_disable_allowed {
+iam_mfa_disable_allowed if {
 	# Must have incident reference
 	incident_ref := string_or_default(params.incident_reference, "")
 	count(incident_ref) > 0
@@ -990,12 +990,12 @@ iam_mfa_disable_allowed {
 # OT System Manual Override:
 # Constraint: requires human-in-loop approval, time-bounded
 
-action_allowed {
+action_allowed if {
 	act == "ot.system.manual_override"
 	ot_manual_override_allowed
 }
 
-ot_manual_override_allowed {
+ot_manual_override_allowed if {
 	hil := bool_or_default(params.human_in_loop_approved, false)
 	hil == true
 	window := number_or_default(constraints.override_window_seconds, 0)
@@ -1006,12 +1006,12 @@ ot_manual_override_allowed {
 # SCADA Setpoint Change:
 # Constraint: change must be within safety bounds
 
-action_allowed {
+action_allowed if {
 	act == "scada.setpoint.change"
 	scada_setpoint_allowed
 }
 
-scada_setpoint_allowed {
+scada_setpoint_allowed if {
 	new_value := number_or_default(params.new_value, 0)
 	min_safe := number_or_default(constraints.setpoint_min, 0)
 	max_safe := number_or_default(constraints.setpoint_max, 100)
@@ -1026,12 +1026,12 @@ scada_setpoint_allowed {
 # Safety Interlock Bypass:
 # Constraint: must have emergency justification and max duration
 
-action_allowed {
+action_allowed if {
 	act == "ot.safety.interlock_bypass"
 	safety_interlock_bypass_allowed
 }
 
-safety_interlock_bypass_allowed {
+safety_interlock_bypass_allowed if {
 	# Emergency justification required
 	justification := string_or_default(params.emergency_justification, "")
 	count(justification) > 20
@@ -1052,12 +1052,12 @@ safety_interlock_bypass_allowed {
 # ServiceNow Emergency Change Approve:
 # Constraint: must have CAB member approval or emergency flag
 
-action_allowed {
+action_allowed if {
 	act == "servicenow.change.emergency_approve"
 	servicenow_emergency_change_allowed
 }
 
-servicenow_emergency_change_allowed {
+servicenow_emergency_change_allowed if {
 	change_number := string_or_default(params.change_number, "")
 	count(change_number) > 0
 
@@ -1067,11 +1067,11 @@ servicenow_emergency_change_allowed {
 	cab_or_emergency_justified(cab_approved, emergency_flag, params)
 }
 
-cab_or_emergency_justified(cab_approved, _, _) {
+cab_or_emergency_justified(cab_approved, _, _) if {
 	cab_approved == true
 }
 
-cab_or_emergency_justified(_, emergency_flag, params) {
+cab_or_emergency_justified(_, emergency_flag, params) if {
 	emergency_flag == true
 	justification := string_or_default(params.emergency_justification, "")
 	count(justification) > 20
@@ -1080,12 +1080,12 @@ cab_or_emergency_justified(_, emergency_flag, params) {
 # ServiceNow Priority 1 Incident:
 # Constraint: must have business impact assessment
 
-action_allowed {
+action_allowed if {
 	act == "servicenow.incident.priority1_create"
 	servicenow_p1_incident_allowed
 }
 
-servicenow_p1_incident_allowed {
+servicenow_p1_incident_allowed if {
 	# Impact assessment required
 	impact := string_or_default(params.business_impact, "")
 	count(impact) > 10
@@ -1098,12 +1098,12 @@ servicenow_p1_incident_allowed {
 # === Workday Actions ===
 
 # Workday Compensation Change:
-action_allowed {
+action_allowed if {
 	act == "workday.compensation.change"
 	workday_compensation_allowed
 }
 
-workday_compensation_allowed {
+workday_compensation_allowed if {
 	# Same constraints as HR compensation
 	pct_change := number_or_default(params.percentage_change, 0)
 	max_pct := number_or_default(constraints.max_compensation_pct_change, 25)
@@ -1115,12 +1115,12 @@ workday_compensation_allowed {
 # === Dynamics 365 Actions ===
 
 # Dynamics Bulk Delete:
-action_allowed {
+action_allowed if {
 	act == "dynamics.entity.bulk_delete"
 	dynamics_bulk_delete_allowed
 }
 
-dynamics_bulk_delete_allowed {
+dynamics_bulk_delete_allowed if {
 	entity_type := string_or_default(params.entity_type, "")
 	record_count := number_or_default(params.record_count, 0)
 
@@ -1133,11 +1133,11 @@ dynamics_bulk_delete_allowed {
 	record_count <= number_or_default(constraints.max_delete_count, 1000)
 }
 
-entity_allowed_or_unconstrained(entity, deletable) {
+entity_allowed_or_unconstrained(entity, deletable) if {
 	count(deletable) == 0
 }
 
-entity_allowed_or_unconstrained(entity, deletable) {
+entity_allowed_or_unconstrained(entity, deletable) if {
 	count(deletable) > 0
 	some i
 	deletable[i] == entity
@@ -1146,12 +1146,12 @@ entity_allowed_or_unconstrained(entity, deletable) {
 # === Cloud Infrastructure Actions ===
 
 # AWS IAM Policy Attach:
-action_allowed {
+action_allowed if {
 	act == "aws.iam.policy_attach"
 	aws_iam_policy_attach_allowed
 }
 
-aws_iam_policy_attach_allowed {
+aws_iam_policy_attach_allowed if {
 	policy_arn := string_or_default(params.policy_arn, "")
 	count(policy_arn) > 0
 
@@ -1159,7 +1159,7 @@ aws_iam_policy_attach_allowed {
 	not startswith(policy_arn, "arn:aws:iam::aws:policy/Administrator")
 }
 
-aws_iam_policy_attach_allowed {
+aws_iam_policy_attach_allowed if {
 	policy_arn := string_or_default(params.policy_arn, "")
 	startswith(policy_arn, "arn:aws:iam::aws:policy/Administrator")
 
@@ -1169,12 +1169,12 @@ aws_iam_policy_attach_allowed {
 }
 
 # Azure RBAC Assign:
-action_allowed {
+action_allowed if {
 	act == "azure.rbac.assign"
 	azure_rbac_assign_allowed
 }
 
-azure_rbac_assign_allowed {
+azure_rbac_assign_allowed if {
 	role_name := string_or_default(params.role_name, "")
 	principal_id := string_or_default(params.principal_id, "")
 	scope := string_or_default(params.scope, "")
@@ -1186,7 +1186,7 @@ azure_rbac_assign_allowed {
 	not dangerous_azure_assignment(role_name, scope, constraints)
 }
 
-dangerous_azure_assignment(role, scope, constraints) {
+dangerous_azure_assignment(role, scope, constraints) if {
 	role == "Owner"
 	contains(scope, "/subscriptions/")
 	not contains(scope, "/resourceGroups/")
@@ -1195,12 +1195,12 @@ dangerous_azure_assignment(role, scope, constraints) {
 }
 
 # Azure Key Vault Secret Set:
-action_allowed {
+action_allowed if {
 	act == "azure.keyvault.secret_set"
 	azure_keyvault_secret_allowed
 }
 
-azure_keyvault_secret_allowed {
+azure_keyvault_secret_allowed if {
 	vault_name := string_or_default(params.vault_name, "")
 	secret_name := string_or_default(params.secret_name, "")
 	count(vault_name) > 0
@@ -1210,7 +1210,7 @@ azure_keyvault_secret_allowed {
 	not production_vault_blocked(vault_name, constraints)
 }
 
-production_vault_blocked(vault_name, constraints) {
+production_vault_blocked(vault_name, constraints) if {
 	prod_vaults := object.get(constraints, "protected_vaults", [])
 	some i
 	prod_vaults[i] == vault_name
@@ -1221,12 +1221,12 @@ production_vault_blocked(vault_name, constraints) {
 # === Catch-all for risk-tiered actions ===
 
 # Medium-risk actions not explicitly defined above: allowed if tier check passes
-action_allowed {
+action_allowed if {
 	is_medium_risk
 	not explicit_medium_risk_rule
 }
 
-explicit_medium_risk_rule {
+explicit_medium_risk_rule if {
 	# List of medium-risk actions that have explicit rules above
 	explicit_actions := []
 	some i
@@ -1234,12 +1234,12 @@ explicit_medium_risk_rule {
 }
 
 # High-risk actions not explicitly defined above: allowed if tier check passes
-action_allowed {
+action_allowed if {
 	is_high_risk
 	not explicit_high_risk_rule
 }
 
-explicit_high_risk_rule {
+explicit_high_risk_rule if {
 	# High-risk actions with explicit constraint rules
 	explicit_actions := [
 		"sap.vendor.change",
@@ -1276,7 +1276,7 @@ explicit_high_risk_rule {
 }
 
 # Low-risk actions not in allowlist: allowed if not blocked
-action_allowed {
+action_allowed if {
 	not is_medium_risk
 	not is_high_risk
 	not low_risk_without_poa
@@ -1284,17 +1284,17 @@ action_allowed {
 
 # === Helpers ===
 
-number_or_default(x, d) := n {
+number_or_default(x, d) := n if {
 	is_number(x)
 	n := x
 } else := d
 
-bool_or_default(x, d) := b {
+bool_or_default(x, d) := b if {
 	is_boolean(x)
 	b := x
 } else := d
 
-string_or_default(x, d) := s {
+string_or_default(x, d) := s if {
 	is_string(x)
 	s := x
 } else := d

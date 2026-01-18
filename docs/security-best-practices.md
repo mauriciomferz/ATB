@@ -8,13 +8,13 @@ ATB implements multiple layers of security:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Network Layer: mTLS, Egress Allowlist, Network Policies               │
+│  Network Layer: mTLS, Egress Allowlist, Network Policies                │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  Identity Layer: SPIFFE/SPIRE, X.509 SVIDs, Certificate Rotation       │
+│  Identity Layer: SPIFFE/SPIRE, X.509 SVIDs, Certificate Rotation        │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  Authorization Layer: PoA Tokens, OPA Policy, Risk Tiers               │
+│  Authorization Layer: PoA Tokens, OPA Policy, Risk Tiers                │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  Audit Layer: Immutable Logs, Hash Chain, Tamper Evidence              │
+│  Audit Layer: Immutable Logs, Hash Chain, Tamper Evidence               │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 

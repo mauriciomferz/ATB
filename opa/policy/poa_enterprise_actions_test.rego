@@ -32,13 +32,13 @@ iam_role_assign_base := {
 	"policy": {"max_ttl_seconds": 300},
 }
 
-test_iam_role_assign_without_dual_control_denied {
+test_iam_role_assign_without_dual_control_denied if {
 	inp := json.patch(iam_role_assign_base, [{"op": "remove", "path": "/poa/leg/dual_control"}])
 	d := decision with input as inp
 	d.allow == false
 }
 
-test_iam_role_assign_with_dual_control_allowed {
+test_iam_role_assign_with_dual_control_allowed if {
 	decision.allow with input as iam_role_assign_base
 }
 
@@ -71,13 +71,13 @@ payment_transfer_base := {
 	"policy": {"max_ttl_seconds": 300},
 }
 
-test_payment_transfer_without_dual_control_denied {
+test_payment_transfer_without_dual_control_denied if {
 	inp := json.patch(payment_transfer_base, [{"op": "remove", "path": "/poa/leg/dual_control"}])
 	d := decision with input as inp
 	d.allow == false
 }
 
-test_payment_transfer_with_dual_control_allowed {
+test_payment_transfer_with_dual_control_allowed if {
 	decision.allow with input as payment_transfer_base
 }
 
@@ -110,13 +110,13 @@ ot_manual_override_base := {
 	"policy": {"max_ttl_seconds": 300},
 }
 
-test_ot_manual_override_without_dual_control_denied {
+test_ot_manual_override_without_dual_control_denied if {
 	inp := json.patch(ot_manual_override_base, [{"op": "remove", "path": "/poa/leg/dual_control"}])
 	d := decision with input as inp
 	d.allow == false
 }
 
-test_ot_manual_override_with_dual_control_allowed {
+test_ot_manual_override_with_dual_control_allowed if {
 	decision.allow with input as ot_manual_override_base
 }
 
@@ -147,7 +147,7 @@ crm_contact_read_base := {
 	"policy": {"max_ttl_seconds": 300},
 }
 
-test_crm_contact_read_with_approval_allowed {
+test_crm_contact_read_with_approval_allowed if {
 	decision.allow with input as crm_contact_read_base
 }
 
@@ -174,7 +174,7 @@ crm_contact_delete_base := {
 	"policy": {"max_ttl_seconds": 300},
 }
 
-test_crm_contact_delete_with_approval_allowed {
+test_crm_contact_delete_with_approval_allowed if {
 	decision.allow with input as crm_contact_delete_base
 }
 
@@ -207,13 +207,13 @@ sap_vendor_change_base := {
 	"policy": {"max_ttl_seconds": 300},
 }
 
-test_sap_vendor_change_without_dual_control_denied {
+test_sap_vendor_change_without_dual_control_denied if {
 	inp := json.patch(sap_vendor_change_base, [{"op": "remove", "path": "/poa/leg/dual_control"}])
 	d := decision with input as inp
 	d.allow == false
 }
 
-test_sap_vendor_change_with_dual_control_allowed {
+test_sap_vendor_change_with_dual_control_allowed if {
 	decision.allow with input as sap_vendor_change_base
 }
 
@@ -221,7 +221,7 @@ test_sap_vendor_change_with_dual_control_allowed {
 # SPIFFE ID Mismatch Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
-test_spiffe_mismatch_denied {
+test_spiffe_mismatch_denied if {
 	inp := json.patch(crm_contact_read_base, [{"op": "replace", "path": "/agent/spiffe_id", "value": "spiffe://atb.example/agent/different-agent"}])
 	d := decision with input as inp
 	d.allow == false
@@ -231,25 +231,25 @@ test_spiffe_mismatch_denied {
 # Missing Required Fields Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
-test_missing_act_denied {
+test_missing_act_denied if {
 	inp := json.patch(crm_contact_read_base, [{"op": "remove", "path": "/poa/act"}])
 	d := decision with input as inp
 	d.allow == false
 }
 
-test_missing_jti_denied {
+test_missing_jti_denied if {
 	inp := json.patch(crm_contact_read_base, [{"op": "remove", "path": "/poa/jti"}])
 	d := decision with input as inp
 	d.allow == false
 }
 
-test_missing_leg_denied {
+test_missing_leg_denied if {
 	inp := json.patch(crm_contact_read_base, [{"op": "remove", "path": "/poa/leg"}])
 	d := decision with input as inp
 	d.allow == false
 }
 
-test_missing_sub_denied {
+test_missing_sub_denied if {
 	inp := json.patch(crm_contact_read_base, [{"op": "remove", "path": "/poa/sub"}])
 	d := decision with input as inp
 	d.allow == false
