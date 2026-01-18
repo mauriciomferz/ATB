@@ -7,6 +7,7 @@ import Approvals from './pages/Approvals';
 import TokenInspector from './pages/TokenInspector';
 import Settings from './pages/Settings';
 import Users from './pages/Users';
+import LiveActivity from './pages/LiveActivity';
 import ThemeToggle from './components/ThemeToggle';
 import ConnectionStatus from './components/ConnectionStatus';
 import ToastContainer from './components/ToastContainer';
@@ -26,6 +27,7 @@ function App() {
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                   <NavLink to="/">Overview</NavLink>
+                  <NavLink to="/live">Live</NavLink>
                   <NavLink to="/audit">Audit Log</NavLink>
                   <NavLink to="/approvals">Approvals</NavLink>
                   <NavLink to="/policies">Policies</NavLink>
@@ -47,6 +49,7 @@ function App() {
         <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/live" element={<LiveActivity />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/policies" element={<Policies />} />

@@ -45,10 +45,71 @@ var (
 		},
 		[]string{"decision", "action"},
 	)
+
+	// Enhanced OPA metrics
+	opaEvaluationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "atb_opa_evaluation_duration_seconds",
+			Help:    "Time spent evaluating OPA policy decisions.",
+			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 15), // 100µs to 1.6s
+		},
+		[]string{"action"},
+	)
+
+	opaDecisionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "atb_opa_decisions_total",
+			Help: "Total OPA policy decisions by outcome, tier, and reason.",
+		},
+		[]string{"decision", "risk_tier", "reason"},
+	)
+
+	opaRiskTierUsage = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "atb_risk_tier_requests_total",
+			Help: "Total requests by risk tier.",
+		},
+		[]string{"tier"},
+	)
+
+	opaDenialReasons = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "atb_denial_reasons_total",
+			Help: "Total denials by denial reason category.",
+		},
+		[]string{"reason"},
+	)
+
+	opaTimePolicyViolations = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "atb_time_policy_violations_total",
+			Help: "Total time-based policy violations by type.",
+		},
+		[]string{"violation_type"},
+	)
+
+	opaActivePoAs = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "atb_active_poas",
+			Help: "Number of currently active PoAs (estimated from recent requests).",
+		},
+	)
+
+	opaApprovalExpiry = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "atb_approval_time_since_seconds",
+			Help:    "Time since approval was granted (for tracking expiration trends).",
+			Buckets: []float64{60, 120, 180, 240, 300, 360, 420, 480, 540, 600}, // 1-10 minutes
+		},
+		[]string{"tier"},
+	)
 )
 
 func init() {
 	prometheus.MustRegister(brokerRequestsTotal)
+	prometheus.MustRegister(opaEvaluationDuration, opaDecisionsTotal, opaRiskTierUsage)
+	prometheus.MustRegister(opaDenialReasons, opaTimePolicyViolations)
+	prometheus.MustRegister(opaActivePoAs, opaApprovalExpiry)
 }
 
 type PoAClaims struct {
@@ -1257,45 +1318,147 @@ type OPAInput struct {
 	Policy   map[string]interface{} `json:"policy,omitempty"`
 }
 
-func (c *OPAClient) Decide(ctx context.Context, input OPAInput) (bool, string, error) {
+// OPADecision represents the full result from an OPA policy evaluation
+type OPADecision struct {
+	Allow    bool                   `json:"allow"`
+	Reason   string                 `json:"reason"`
+	Details  map[string]interface{} `json:"details,omitempty"`
+	RiskTier string                 `json:"risk_tier,omitempty"`
+}
+
+// DecideWithMetrics evaluates OPA policy and records detailed metrics
+func (c *OPAClient) DecideWithMetrics(ctx context.Context, input OPAInput) (OPADecision, error) {
+	startTime := time.Now()
+	action := ""
+	if act, ok := input.PoA["act"].(string); ok {
+		action = act
+	}
+
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		opaEvaluationDuration.WithLabelValues(action).Observe(duration)
+	}()
+
 	body, err := json.Marshal(map[string]interface{}{"input": input})
 	if err != nil {
-		return false, "", err
+		return OPADecision{}, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL, bytes.NewReader(body))
 	if err != nil {
-		return false, "", err
+		return OPADecision{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return false, "", err
+		opaDecisionsTotal.WithLabelValues("error", "unknown", "opa_unreachable").Inc()
+		return OPADecision{}, err
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode/100 != 2 {
-		return false, "", fmt.Errorf("OPA status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		opaDecisionsTotal.WithLabelValues("error", "unknown", "opa_error").Inc()
+		return OPADecision{}, fmt.Errorf("OPA status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 
 	var decoded struct {
 		Result interface{} `json:"result"`
 	}
 	if err := json.Unmarshal(respBody, &decoded); err != nil {
-		return false, "", err
+		return OPADecision{}, err
 	}
 
-	// Support either boolean result or object {allow, reason}.
+	var decision OPADecision
+
 	switch v := decoded.Result.(type) {
 	case bool:
-		return v, "", nil
+		decision.Allow = v
+		if v {
+			decision.Reason = "allow"
+		} else {
+			decision.Reason = "deny"
+		}
 	case map[string]interface{}:
-		allow, _ := v["allow"].(bool)
-		reason, _ := v["reason"].(string)
-		return allow, reason, nil
+		decision.Allow, _ = v["allow"].(bool)
+		decision.Reason, _ = v["reason"].(string)
+		if details, ok := v["details"].(map[string]interface{}); ok {
+			decision.Details = details
+			if tier, ok := details["tier"].(string); ok {
+				decision.RiskTier = tier
+			}
+		}
 	default:
-		return false, "", fmt.Errorf("unexpected OPA result type: %T", decoded.Result)
+		return OPADecision{}, fmt.Errorf("unexpected OPA result type: %T", decoded.Result)
 	}
+
+	// Record metrics based on decision
+	decisionStr := "allow"
+	if !decision.Allow {
+		decisionStr = "deny"
+	}
+
+	// Determine risk tier from details or infer from action
+	riskTier := decision.RiskTier
+	if riskTier == "" {
+		riskTier = inferRiskTier(action)
+	}
+
+	opaDecisionsTotal.WithLabelValues(decisionStr, riskTier, decision.Reason).Inc()
+	opaRiskTierUsage.WithLabelValues(riskTier).Inc()
+
+	if !decision.Allow {
+		opaDenialReasons.WithLabelValues(decision.Reason).Inc()
+
+		// Track time policy violations specifically
+		if decision.Reason == "time_policy_violation" {
+			if violations, ok := decision.Details["violations"].([]interface{}); ok {
+				for _, v := range violations {
+					if vs, ok := v.(string); ok {
+						// Extract violation type (e.g., "rate_limit_exceeded", "outside_business_hours")
+						violationType := strings.Split(vs, ":")[0]
+						opaTimePolicyViolations.WithLabelValues(violationType).Inc()
+					}
+				}
+			}
+		}
+	}
+
+	return decision, nil
+}
+
+// inferRiskTier attempts to determine risk tier from action name patterns
+func inferRiskTier(action string) string {
+	// Critical actions
+	if strings.HasPrefix(action, "org.") ||
+		strings.HasPrefix(action, "security.root") ||
+		strings.HasPrefix(action, "security.master_key") ||
+		strings.Contains(action, "full_export") ||
+		strings.Contains(action, "over_10m") {
+		return "critical"
+	}
+	// High risk patterns
+	if strings.HasPrefix(action, "sap.payment") ||
+		strings.HasPrefix(action, "ot.") ||
+		strings.HasPrefix(action, "iam.") ||
+		strings.Contains(action, "bulk_") ||
+		strings.Contains(action, "execute") {
+		return "high"
+	}
+	// Medium risk patterns
+	if strings.Contains(action, "update") ||
+		strings.Contains(action, "delete") ||
+		strings.Contains(action, "create") {
+		return "medium"
+	}
+	return "low"
+}
+
+func (c *OPAClient) Decide(ctx context.Context, input OPAInput) (bool, string, error) {
+	decision, err := c.DecideWithMetrics(ctx, input)
+	if err != nil {
+		return false, "", err
+	}
+	return decision.Allow, decision.Reason, nil
 }
 
 func mustParseURL(raw string) *url.URL {

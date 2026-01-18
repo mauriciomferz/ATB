@@ -1,0 +1,183 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atb-operator
+  labels:
+    app.kubernetes.io/name: atb-operator
+    app.kubernetes.io/component: operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atb-operator
+  namespace: atb-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: atb-operator
+rules:
+  # AgentTask CRD management
+  - apiGroups: ["atb.siemens.com"]
+    resources: ["agenttasks"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["atb.siemens.com"]
+    resources: ["agenttasks/status"]
+    verbs: ["get", "update", "patch"]
+  
+  # Workload management (controlled by ATB)
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "update", "patch"]
+  
+  # Config management (controlled by ATB)
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  
+  # Service management
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  
+  # Events for status reporting
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: atb-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: atb-operator
+subjects:
+  - kind: ServiceAccount
+    name: atb-operator
+    namespace: atb-operator
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: atb-operator-tls
+  namespace: atb-operator
+type: kubernetes.io/tls
+data:
+  # Replace with actual certificates
+  tls.crt: ""  # Base64-encoded client certificate
+  tls.key: ""  # Base64-encoded client private key
+  ca.crt: ""   # Base64-encoded CA certificate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atb-operator
+  namespace: atb-operator
+  labels:
+    app.kubernetes.io/name: atb-operator
+    app.kubernetes.io/component: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: atb-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: atb-operator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: atb-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: operator
+          image: ghcr.io/siemens/atb-operator:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: ATB_BROKER_URL
+              value: "https://atb-broker.atb-system.svc:8443"
+            - name: WATCH_NAMESPACE
+              value: ""  # Empty = watch all namespaces
+            - name: TLS_CERT_FILE
+              value: "/etc/tls/tls.crt"
+            - name: TLS_KEY_FILE
+              value: "/etc/tls/tls.key"
+            - name: TLS_CA_FILE
+              value: "/etc/tls/ca.crt"
+            - name: LOG_LEVEL
+              value: "info"
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /etc/tls
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: atb-operator-tls
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: atb-operator
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atb-operator
+  namespace: atb-operator
+  labels:
+    app.kubernetes.io/name: atb-operator
+spec:
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: metrics
+  selector:
+    app.kubernetes.io/name: atb-operator

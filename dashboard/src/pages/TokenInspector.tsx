@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { verifyPoa, type PoaVerificationResult } from '../api';
 
 interface DecodedToken {
   header: Record<string, unknown>;
@@ -10,10 +11,14 @@ export default function TokenInspector() {
   const [token, setToken] = useState('');
   const [decoded, setDecoded] = useState<DecodedToken | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [verificationResult, setVerificationResult] = useState<PoaVerificationResult | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [testAction, setTestAction] = useState('');
 
   const decodeToken = () => {
     setError(null);
     setDecoded(null);
+    setVerificationResult(null);
 
     if (!token.trim()) {
       setError('Please enter a token');
@@ -42,8 +47,32 @@ export default function TokenInspector() {
         payload,
         signature: parts[2],
       });
+
+      // Auto-populate action from token if present
+      if (payload.act && typeof payload.act === 'string') {
+        setTestAction(payload.act);
+      }
     } catch (e) {
       setError(`Failed to decode token: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
+  };
+
+  const verifyToken = async () => {
+    if (!token.trim()) {
+      setError('Please enter a token');
+      return;
+    }
+
+    setIsVerifying(true);
+    setError(null);
+
+    try {
+      const result = await verifyPoa(token, testAction || undefined);
+      setVerificationResult(result);
+    } catch (e) {
+      setError(`Verification failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -72,18 +101,49 @@ export default function TokenInspector() {
           <button className="btn btn-primary" onClick={decodeToken}>
             Decode Token
           </button>
+          <button 
+            className="btn bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            onClick={verifyToken}
+            disabled={isVerifying || !token.trim()}
+          >
+            {isVerifying ? 'Verifying...' : '🔐 Verify Signature'}
+          </button>
           <button
             className="btn bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
             onClick={() => {
               setToken('');
               setDecoded(null);
               setError(null);
+              setVerificationResult(null);
+              setTestAction('');
             }}
           >
             Clear
           </button>
         </div>
+
+        {/* Action to test against */}
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Test Action (optional)
+          </label>
+          <input
+            type="text"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            placeholder="e.g., sap.vendor.bank_change"
+            value={testAction}
+            onChange={(e) => setTestAction(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Specify an action to test policy evaluation against
+          </p>
+        </div>
       </div>
+
+      {/* Verification Result */}
+      {verificationResult && (
+        <VerificationResultPanel result={verificationResult} />
+      )}
 
       {/* Error */}
       {error && (
@@ -224,6 +284,174 @@ export default function TokenInspector() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function VerificationResultPanel({ result }: { result: PoaVerificationResult }) {
+  const riskTierColors = {
+    LOW: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+    MEDIUM: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+    HIGH: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+    CRITICAL: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  };
+
+  return (
+    <div className="card">
+      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+        🔐 Verification Result
+      </h3>
+
+      {/* Overall Status */}
+      <div
+        className={`p-4 rounded-lg mb-6 ${
+          result.valid
+            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+            : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span
+              className={`w-4 h-4 rounded-full ${result.valid ? 'bg-green-500' : 'bg-red-500'}`}
+            />
+            <span
+              className={`text-lg font-semibold ${
+                result.valid
+                  ? 'text-green-700 dark:text-green-400'
+                  : 'text-red-700 dark:text-red-400'
+              }`}
+            >
+              {result.valid ? '✓ Valid POA Token' : '✗ Invalid POA Token'}
+            </span>
+          </div>
+          <span className={`px-2 py-1 rounded text-sm font-medium ${riskTierColors[result.riskTier]}`}>
+            {result.riskTier} RISK
+          </span>
+        </div>
+
+        {result.policyEvaluation && (
+          <div className="mt-3 pt-3 border-t border-green-200 dark:border-green-800">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Policy Decision: </span>
+            <span
+              className={`font-medium ${
+                result.policyEvaluation.decision === 'allow'
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-red-600 dark:text-red-400'
+              }`}
+            >
+              {result.policyEvaluation.decision.toUpperCase()}
+            </span>
+            {result.policyEvaluation.reason && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {' '}
+                — {result.policyEvaluation.reason}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Status Badges */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <StatusBadge
+          label="Signature"
+          passed={result.signatureValid}
+          passedText="Valid"
+          failedText="Invalid"
+        />
+        <StatusBadge
+          label="Expiration"
+          passed={!result.expired}
+          passedText="Not Expired"
+          failedText="Expired"
+        />
+        <StatusBadge
+          label="Revocation"
+          passed={!result.revoked}
+          passedText="Active"
+          failedText="Revoked"
+        />
+      </div>
+
+      {/* Detailed Checks */}
+      <div>
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          Verification Checks
+        </h4>
+        <div className="space-y-2">
+          {result.checks.map((check, i) => (
+            <div
+              key={i}
+              className={`flex items-start gap-3 p-3 rounded-lg ${
+                check.passed
+                  ? 'bg-green-50 dark:bg-green-900/10'
+                  : 'bg-red-50 dark:bg-red-900/10'
+              }`}
+            >
+              <span className="text-lg">{check.passed ? '✓' : '✗'}</span>
+              <div>
+                <span
+                  className={`font-medium ${
+                    check.passed
+                      ? 'text-green-700 dark:text-green-400'
+                      : 'text-red-700 dark:text-red-400'
+                  }`}
+                >
+                  {check.name}
+                </span>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{check.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Time Policy Violations */}
+      {result.policyEvaluation?.timePolicyViolations &&
+        result.policyEvaluation.timePolicyViolations.length > 0 && (
+          <div className="mt-6">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              ⏰ Time Policy Violations
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {result.policyEvaluation.timePolicyViolations.map((violation, i) => (
+                <span
+                  key={i}
+                  className="px-2 py-1 rounded bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 text-sm"
+                >
+                  {violation.replace(/_/g, ' ')}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+    </div>
+  );
+}
+
+function StatusBadge({
+  label,
+  passed,
+  passedText,
+  failedText,
+}: {
+  label: string;
+  passed: boolean;
+  passedText: string;
+  failedText: string;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+        passed
+          ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+          : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+      }`}
+    >
+      <span>{passed ? '✓' : '✗'}</span>
+      <span className="font-medium">{label}:</span>
+      <span>{passed ? passedText : failedText}</span>
     </div>
   );
 }

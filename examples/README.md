@@ -1,13 +1,57 @@
 # ATB Client Examples
 
-This directory contains example client implementations for interacting with the ATB (Agent Trust Broker) API.
+This directory contains example client implementations and integration patterns
+for the ATB (Agent Trust Broker) API.
 
 ## Examples
 
-| File | Language | Description |
-|------|----------|-------------|
-| [client_python.py](client_python.py) | Python | Python client with mTLS and PoA token minting |
-| [client_go.go](client_go.go) | Go | Go client with mTLS and PoA token minting |
+### Client Libraries
+
+| File                                 | Language | Description                                   |
+| ------------------------------------ | -------- | --------------------------------------------- |
+| [client_python.py](client_python.py) | Python   | Python client with mTLS and PoA token minting |
+| [client_go.go](client_go.go)         | Go       | Go client with mTLS and PoA token minting     |
+
+### Integration Patterns
+
+| Directory                                | Platform   | Description                                   |
+| ---------------------------------------- | ---------- | --------------------------------------------- |
+| [k8s-operator/](k8s-operator/)           | Kubernetes | Operator for policy-controlled K8s operations |
+| [lambda-authorizer/](lambda-authorizer/) | AWS        | Lambda authorizer for API Gateway             |
+
+## Kubernetes Operator
+
+The K8s operator enables AI agents to perform Kubernetes operations with ATB authorization:
+
+```yaml
+apiVersion: atb.siemens.com/v1alpha1
+kind: AgentTask
+metadata:
+  name: scale-deployment
+spec:
+  agentId: "spiffe://atb.example.com/agent/planning-agent"
+  poaToken: "eyJhbGciOi..."
+  action: scale
+  target:
+    kind: Deployment
+    name: web-frontend
+    namespace: production
+  payload:
+    replicas: 5
+```
+
+See [k8s-operator/README.md](k8s-operator/README.md) for deployment instructions.
+
+## AWS Lambda Authorizer
+
+The Lambda authorizer protects API Gateway endpoints with ATB authorization:
+
+```bash
+curl -X GET https://api.example.com/protected \
+  -H "Authorization: Bearer <poa-token>"
+```
+
+See [lambda-authorizer/README.md](lambda-authorizer/README.md) for deployment instructions.
 
 ## Prerequisites
 
@@ -62,13 +106,13 @@ Each example demonstrates three scenarios:
 
 All examples support environment variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ATB_BROKER_URL` | `https://localhost:8443` | ATB broker URL |
-| `POA_KEY_PATH` | `dev/poa_rsa.key` | Path to PoA signing key |
-| `CLIENT_CERT_PATH` | `dev/certs/client.crt` | Path to mTLS client certificate |
-| `CLIENT_KEY_PATH` | `dev/certs/client.key` | Path to mTLS client key |
-| `CA_CERT_PATH` | `dev/certs/ca.crt` | Path to CA certificate |
+| Variable           | Default                  | Description                     |
+| ------------------ | ------------------------ | ------------------------------- |
+| `ATB_BROKER_URL`   | `https://localhost:8443` | ATB broker URL                  |
+| `POA_KEY_PATH`     | `dev/poa_rsa.key`        | Path to PoA signing key         |
+| `CLIENT_CERT_PATH` | `dev/certs/client.crt`   | Path to mTLS client certificate |
+| `CLIENT_KEY_PATH`  | `dev/certs/client.key`   | Path to mTLS client key         |
+| `CA_CERT_PATH`     | `dev/certs/ca.crt`       | Path to CA certificate          |
 
 ## PoA Token Structure
 
@@ -90,8 +134,8 @@ The Proof-of-Authorization (PoA) token is a JWT with these claims:
     },
     "dual_control": {
       "approvers": [
-        {"id": "approver1@example.com", "timestamp": "2026-01-11T10:00:00Z"},
-        {"id": "approver2@example.com", "timestamp": "2026-01-11T10:05:00Z"}
+        { "id": "approver1@example.com", "timestamp": "2026-01-11T10:00:00Z" },
+        { "id": "approver2@example.com", "timestamp": "2026-01-11T10:05:00Z" }
       ]
     }
   },
@@ -104,18 +148,22 @@ The Proof-of-Authorization (PoA) token is a JWT with these claims:
 ## Troubleshooting
 
 **"Connection refused"**
+
 - Make sure the broker is running: `make docker-up` or `make run-broker`
 
 **"Certificate error"**
+
 - Regenerate certificates: `make certs`
 - Check CA certificate matches: `openssl verify -CAfile dev/certs/ca.crt dev/certs/client.crt`
 
 **"PoA validation failed"**
+
 - Check PoA key matches what broker expects
 - Ensure token hasn't expired (5 minute TTL)
 - Verify SPIFFE ID in token matches certificate
 
 **"Authorization denied"**
+
 - Check the action's risk tier
 - MEDIUM risk: add `approval` to legal basis
 - HIGH risk: add `dual_control` with 2 approvers

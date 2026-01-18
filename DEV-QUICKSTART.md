@@ -13,6 +13,7 @@
 ## 📝 Quick Commands
 
 ### Check Service Status
+
 ```bash
 # All services
 curl -s http://localhost:8181/health && echo "✅ OPA" || echo "❌ OPA"
@@ -22,6 +23,7 @@ curl -s http://localhost:3003 >/dev/null && echo "✅ Frontend" || echo "❌ Fro
 ```
 
 ### Test OPA Policy
+
 ```bash
 # Test without PoA (should deny)
 curl -X POST http://localhost:8181/v1/data/atb/poa/decision \
@@ -37,6 +39,7 @@ curl -X POST http://localhost:8181/v1/data/atb/poa/decision \
 ```
 
 ### Test Broker
+
 ```bash
 # Health check
 curl http://localhost:8080/health
@@ -49,6 +52,7 @@ curl http://localhost:8080/metrics
 ```
 
 ### View Logs
+
 ```bash
 # Broker logs
 tail -f /tmp/broker.log
@@ -60,6 +64,7 @@ tail -f /tmp/broker.log
 ## 🔧 Development Workflow
 
 ### 1. Modify OPA Policies
+
 ```bash
 # Edit policy file
 code opa/policy/poa.rego
@@ -68,6 +73,7 @@ code opa/policy/poa.rego
 ```
 
 ### 2. Test Policy Changes
+
 ```bash
 # Run OPA tests
 make test-opa
@@ -77,6 +83,7 @@ opa test opa/policy/ -v --v0-compatible
 ```
 
 ### 3. Modify Broker Code
+
 ```bash
 # Edit Go code
 code atb-gateway-go/
@@ -90,6 +97,7 @@ nohup sh -c 'cd atb-gateway-go && UPSTREAM_URL=http://localhost:9001 POA_VERIFY_
 ```
 
 ### 4. Modify Frontend
+
 ```bash
 # Frontend auto-reloads via Vite HMR
 code dashboard/src/
@@ -100,6 +108,7 @@ code dashboard/src/
 ## 🐛 Troubleshooting
 
 ### Service Won't Start
+
 ```bash
 # Check if port is in use
 lsof -ti:8181  # OPA
@@ -113,6 +122,7 @@ lsof -ti:PORT | xargs kill -9
 ```
 
 ### OPA Policy Errors
+
 ```bash
 # Validate policy syntax
 opa fmt -w opa/policy/
@@ -122,6 +132,7 @@ opa check opa/policy/
 ```
 
 ### Broker Not Responding
+
 ```bash
 # Check broker logs
 tail -20 /tmp/broker.log
@@ -144,17 +155,20 @@ bash /tmp/restart-broker.sh  # If you create this script
 ## 🔗 Useful Endpoints
 
 ### OPA
+
 - Health: `http://localhost:8181/health`
 - Policy Query: `POST http://localhost:8181/v1/data/atb/poa/decision`
 - Metrics: `http://localhost:8181/metrics`
 
 ### ATB Broker
+
 - Health: `http://localhost:8080/health`
 - Ready: `http://localhost:8080/ready`
 - Metrics: `http://localhost:8080/metrics`
 - API: `https://localhost:8443/v1/*`
 
 ### Frontend
+
 - Dashboard: `http://localhost:3003`
 
 ## 🎯 Next Steps

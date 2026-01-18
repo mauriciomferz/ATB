@@ -1,0 +1,145 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: agenttasks.atb.siemens.com
+  annotations:
+    description: "AgentTask resources represent actions submitted by AI agents that require ATB authorization"
+spec:
+  group: atb.siemens.com
+  names:
+    kind: AgentTask
+    listKind: AgentTaskList
+    plural: agenttasks
+    singular: agenttask
+    shortNames:
+      - at
+      - atask
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - agentId
+                - poaToken
+                - action
+                - target
+              properties:
+                agentId:
+                  type: string
+                  description: "SPIFFE ID of the requesting agent"
+                  pattern: "^spiffe://[a-z0-9.-]+/.*$"
+                poaToken:
+                  type: string
+                  description: "JWT Proof of Authorization token"
+                action:
+                  type: string
+                  description: "Kubernetes action to perform"
+                  enum:
+                    - scale
+                    - restart
+                    - update-config
+                    - deploy
+                    - rollback
+                    - patch
+                target:
+                  type: object
+                  required:
+                    - kind
+                    - name
+                    - namespace
+                  properties:
+                    kind:
+                      type: string
+                      description: "Kind of the target resource"
+                      enum:
+                        - Deployment
+                        - StatefulSet
+                        - DaemonSet
+                        - ConfigMap
+                        - Secret
+                        - Service
+                    name:
+                      type: string
+                      description: "Name of the target resource"
+                    namespace:
+                      type: string
+                      description: "Namespace of the target resource"
+                payload:
+                  type: object
+                  description: "Action-specific payload data"
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  description: "Current phase of the task"
+                  enum:
+                    - Pending
+                    - Processing
+                    - Executing
+                    - Completed
+                    - Denied
+                    - Failed
+                message:
+                  type: string
+                  description: "Human-readable message about the current status"
+                startedAt:
+                  type: string
+                  format: date-time
+                  description: "Timestamp when processing started"
+                finishedAt:
+                  type: string
+                  format: date-time
+                  description: "Timestamp when processing finished"
+                atbResult:
+                  type: object
+                  description: "Result from ATB authorization"
+                  properties:
+                    allowed:
+                      type: boolean
+                      description: "Whether the action was authorized"
+                    riskTier:
+                      type: string
+                      description: "Risk tier assigned by ATB"
+                      enum:
+                        - LOW
+                        - MEDIUM
+                        - HIGH
+                        - CRITICAL
+                    reason:
+                      type: string
+                      description: "Reason for the decision"
+                    requestId:
+                      type: string
+                      description: "ATB request ID for audit correlation"
+                    evaluateMs:
+                      type: integer
+                      description: "Time taken to evaluate the policy in milliseconds"
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Action
+          type: string
+          jsonPath: .spec.action
+        - name: Target
+          type: string
+          jsonPath: .spec.target.name
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Risk
+          type: string
+          jsonPath: .status.atbResult.riskTier
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

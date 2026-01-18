@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ATB Lambda Authorizer for API Gateway
+  
+  This SAM template deploys a Lambda authorizer that integrates with ATB
+  (Agent Trust Broker) to authorize API requests from AI agents.
+
+Parameters:
+  ATBBrokerURL:
+    Type: String
+    Description: URL of the ATB Broker
+    Default: https://atb-broker.example.com
+  
+  CacheTTLSeconds:
+    Type: Number
+    Description: TTL for caching authorization decisions
+    Default: 60
+    MinValue: 0
+    MaxValue: 3600
+  
+  LogLevel:
+    Type: String
+    Description: Logging level
+    Default: INFO
+    AllowedValues:
+      - DEBUG
+      - INFO
+      - WARNING
+      - ERROR
+
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: python3.11
+    Architectures:
+      - arm64
+    Environment:
+      Variables:
+        ATB_BROKER_URL: !Ref ATBBrokerURL
+        CACHE_TTL_SECONDS: !Ref CacheTTLSeconds
+        LOG_LEVEL: !Ref LogLevel
+
+Resources:
+  ATBAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: atb-lambda-authorizer
+      Description: ATB Lambda Authorizer for API Gateway
+      Handler: handler.lambda_handler
+      CodeUri: .
+      MemorySize: 256
+      Tracing: Active
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: '*'
+      Tags:
+        Application: ATB
+        Component: Authorizer
+
+  ATBAuthorizerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ATBAuthorizerFunction}
+      RetentionInDays: 30
+
+  # Example API Gateway with ATB Authorizer
+  ExampleAPI:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      Description: Example API with ATB authorization
+      Auth:
+        DefaultAuthorizer: ATBAuthorizer
+        Authorizers:
+          ATBAuthorizer:
+            AuthorizerPayloadFormatVersion: "2.0"
+            EnableSimpleResponses: false
+            FunctionArn: !GetAtt ATBAuthorizerFunction.Arn
+            FunctionInvokeRole: !GetAtt AuthorizerInvokeRole.Arn
+            Identity:
+              Headers:
+                - Authorization
+            AuthorizerResultTtlInSeconds: !Ref CacheTTLSeconds
+
+  AuthorizerInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeAuthorizer
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt ATBAuthorizerFunction.Arn
+
+  # Permission for API Gateway to invoke the authorizer
+  AuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ATBAuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExampleAPI}/*
+
+  # Example backend function (protected by ATB)
+  ExampleBackendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: atb-example-backend
+      Handler: index.handler
+      Runtime: python3.11
+      InlineCode: |
+        import json
+        def handler(event, context):
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({
+                    'message': 'Hello from ATB-protected API!',
+                    'agent_id': event.get('requestContext', {}).get('authorizer', {}).get('agent_id', 'unknown'),
+                    'risk_tier': event.get('requestContext', {}).get('authorizer', {}).get('atb_risk_tier', 'unknown')
+                })
+            }
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ExampleAPI
+            Path: /protected
+            Method: GET
+
+Outputs:
+  ATBAuthorizerFunctionArn:
+    Description: ARN of the ATB Lambda Authorizer
+    Value: !GetAtt ATBAuthorizerFunction.Arn
+    Export:
+      Name: ATBAuthorizerFunctionArn
+  
+  ExampleAPIEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ExampleAPI}.execute-api.${AWS::Region}.amazonaws.com/prod
+  
+  AuthorizerInvokeRoleArn:
+    Description: ARN of the role API Gateway uses to invoke the authorizer
+    Value: !GetAtt AuthorizerInvokeRole.Arn

@@ -227,6 +227,7 @@ decision := {"allow": true, "reason": "allow"} if {
 	action_matches_request
 	action_allowed
 	risk_tier_approved
+	time_policy_valid
 }
 
 # Risk tier approval check
@@ -242,6 +243,11 @@ risk_tier_approved if {
 risk_tier_approved if {
 	action_risk_tier == "high"
 	high_risk_approved
+}
+
+risk_tier_approved if {
+	action_risk_tier == "critical"
+	critical_risk_approved
 }
 
 # Action matches request check (either no action requested or matches PoA)
@@ -318,6 +324,26 @@ decision := {"allow": false, "reason": "missing_required_fields"} if {
 	action_allowed
 	is_high_risk
 	not high_risk_approved
+} else := {"allow": false, "reason": "critical_risk_executive_approval_required", "details": {"tier": "critical", "action": act}} if {
+	poa_provided
+	count(missing_required_fields) == 0
+	leg_valid
+	ttl_valid
+	poa.sub == agent_spiffe
+	platform_spiffe_binding_valid
+	action_allowed
+	is_critical_risk
+	not critical_risk_approved
+} else := {"allow": false, "reason": "time_policy_violation", "details": {"violations": time_policy_violations_list}} if {
+	poa_provided
+	count(missing_required_fields) == 0
+	leg_valid
+	ttl_valid
+	poa.sub == agent_spiffe
+	platform_spiffe_binding_valid
+	action_allowed
+	risk_tier_approved
+	not time_policy_valid
 }
 
 # Low-risk action allowlist (no PoA required when ALLOW_UNMANDATED_LOW_RISK=true)
@@ -554,6 +580,61 @@ high_risk_actions := [
 	"dynamics.security_role.assign",
 ]
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CRITICAL-risk tier: requires PoA with board/executive approval
+# Actions that can have existential impact on the organization
+# ─────────────────────────────────────────────────────────────────────────────
+
+critical_risk_actions := [
+	# ── Organizational Changes ──
+	"org.company.dissolve",
+	"org.company.merge",
+	"org.company.acquire",
+	"org.division.spin_off",
+	"org.restructure.major",
+	
+	# ── Financial Critical ──
+	"finance.wire.over_10m",
+	"finance.loan.major_facility",
+	"finance.bond.issuance",
+	"finance.stock.buyback",
+	"finance.dividend.declare",
+	"treasury.investment.major",
+	"treasury.hedge.significant",
+	
+	# ── Legal/Regulatory ──
+	"legal.settlement.major",
+	"legal.litigation.initiate_major",
+	"compliance.regulator.filing_major",
+	"compliance.violation.disclose",
+	
+	# ── Data/Privacy Catastrophic ──
+	"data.customer.full_export",
+	"data.employee.full_export",
+	"data.company.full_backup_restore",
+	"gdpr.breach.notify",
+	"data.encryption_keys.export",
+	
+	# ── Infrastructure Critical ──
+	"infra.datacenter.decommission",
+	"infra.cloud.region_migrate",
+	"infra.network.core_change",
+	"infra.disaster_recovery.invoke",
+	
+	# ── Security Critical ──
+	"security.root.access",
+	"security.master_key.rotate",
+	"security.audit.disable",
+	"security.encryption.disable",
+	"security.firewall.disable",
+	
+	# ── OT Safety Critical ──
+	"ot.safety.system_shutdown",
+	"ot.emergency.stop_all",
+	"ot.reactor.scram",
+	"ot.pipeline.emergency_shutoff",
+]
+
 # Check if action is medium-risk
 is_medium_risk if {
 	medium_risk_actions[_] == act
@@ -562,6 +643,11 @@ is_medium_risk if {
 # Check if action is high-risk
 is_high_risk if {
 	high_risk_actions[_] == act
+}
+
+# Check if action is critical-risk
+is_critical_risk if {
+	critical_risk_actions[_] == act
 }
 
 # Medium-risk validation: requires approval in leg claim
@@ -587,6 +673,38 @@ high_risk_approved if {
 	all_approvers_distinct
 }
 
+# Critical-risk validation: requires executive/board approval
+# Needs at least 2 executive-level approvers with specific roles
+critical_risk_approved if {
+	is_critical_risk
+	is_object(leg.executive_control)
+	leg.executive_control.required == true
+	is_array(leg.executive_control.approvers)
+	count(leg.executive_control.approvers) >= 2
+
+	# Validate executive approval requirements
+	executive_approval_valid
+}
+
+# Executive approval requires specific roles (CEO, CFO, Board Member, etc.)
+executive_approval_valid if {
+	approvers := leg.executive_control.approvers
+	
+	# Check that all approvers have valid executive roles
+	executive_roles := ["ceo", "cfo", "coo", "cto", "ciso", "board_member", "general_counsel", "chief_risk_officer"]
+	
+	# Count approvers with valid executive roles
+	exec_approvers := [a | some i; a := approvers[i]; lower(a.role) == executive_roles[_]]
+	count(exec_approvers) >= 2
+	
+	# No self-approval
+	count([a | some i; a := approvers[i]; a.id == poa.sub]) == 0
+	
+	# All approvers must be unique
+	unique_ids := {id | some i; id := approvers[i].id}
+	count(unique_ids) >= 2
+}
+
 all_approvers_distinct if {
 	approvers := leg.dual_control.approvers
 
@@ -608,13 +726,338 @@ no_self_approval if {
 # Action risk tier determination - using else chain to avoid multiple outputs
 default action_risk_tier := "low"
 
+action_risk_tier := "critical" if {
+	is_critical_risk
+}
+
 action_risk_tier := "high" if {
+	not is_critical_risk
 	is_high_risk
 }
 
 action_risk_tier := "medium" if {
+	not is_critical_risk
 	not is_high_risk
 	is_medium_risk
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Time-based policy controls
+# Business hours validation, rate limiting, and approval expiration
+# These are OPTIONAL - if time_policy data is not configured, they pass by default
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Check if time policies are enabled
+time_policy_enabled if {
+	is_object(data.time_policy)
+}
+
+time_policy_enabled if {
+	is_object(data.rate_limits)
+}
+
+# Current timestamp from input (broker should provide this)
+default current_time_ns := 0
+
+current_time_ns := input.current_time_ns if {
+	is_number(input.current_time_ns)
+}
+
+current_time_unix := t if {
+	current_time_ns > 0
+	t := current_time_ns / 1000000000  # Convert nanoseconds to seconds
+}
+
+current_time_unix := t if {
+	current_time_ns == 0
+	is_number(poa.iat)
+	t := poa.iat  # Fallback to PoA issued-at time
+}
+
+current_time_unix := 0 if {
+	current_time_ns == 0
+	not is_number(poa.iat)
+}
+
+# Time components (UTC) - only compute if we have a valid timestamp
+current_hour := h if {
+	current_time_unix > 0
+	h := time.clock([current_time_unix * 1000000000, "UTC"])[0]
+}
+
+current_hour := 12 if {
+	current_time_unix == 0  # Default to noon (within business hours)
+}
+
+current_weekday := d if {
+	current_time_unix > 0
+	d := time.weekday(current_time_unix * 1000000000)
+}
+
+current_weekday := "Wednesday" if {
+	current_time_unix == 0  # Default to Wednesday (weekday)
+}
+
+# Business hours configuration (from policy data or defaults)
+# data.time_policy.business_hours.start_hour: 9 (9 AM)
+# data.time_policy.business_hours.end_hour: 17 (5 PM)
+# data.time_policy.business_hours.timezone: "UTC"
+# data.time_policy.business_hours.required_for_high_risk: true
+
+business_hours_start := s if {
+	is_object(data.time_policy)
+	is_object(data.time_policy.business_hours)
+	s := object.get(data.time_policy.business_hours, "start_hour", 9)
+}
+
+business_hours_start := 9 if {
+	not is_object(data.time_policy)
+}
+
+business_hours_start := 9 if {
+	is_object(data.time_policy)
+	not is_object(data.time_policy.business_hours)
+}
+
+business_hours_end := e if {
+	is_object(data.time_policy)
+	is_object(data.time_policy.business_hours)
+	e := object.get(data.time_policy.business_hours, "end_hour", 17)
+}
+
+business_hours_end := 17 if {
+	not is_object(data.time_policy)
+}
+
+business_hours_end := 17 if {
+	is_object(data.time_policy)
+	not is_object(data.time_policy.business_hours)
+}
+
+business_hours_required_for_high_risk := r if {
+	is_object(data.time_policy)
+	is_object(data.time_policy.business_hours)
+	r := object.get(data.time_policy.business_hours, "required_for_high_risk", false)
+}
+
+business_hours_required_for_high_risk := false if {
+	not is_object(data.time_policy)
+}
+
+business_hours_required_for_high_risk := false if {
+	is_object(data.time_policy)
+	not is_object(data.time_policy.business_hours)
+}
+
+# Check if current time is within business hours
+is_business_hours if {
+	current_hour >= business_hours_start
+	current_hour < business_hours_end
+	is_weekday
+}
+
+is_weekday if {
+	current_weekday != "Saturday"
+	current_weekday != "Sunday"
+}
+
+# Business hours validation result
+business_hours_valid if {
+	not business_hours_required_for_high_risk
+}
+
+business_hours_valid if {
+	business_hours_required_for_high_risk
+	action_risk_tier != "high"
+}
+
+business_hours_valid if {
+	business_hours_required_for_high_risk
+	action_risk_tier == "high"
+	is_business_hours
+}
+
+# Helper to safely get allow_outside_business_hours constraint
+allow_outside_business_hours := object.get(constraints, "allow_outside_business_hours", false)
+
+business_hours_valid if {
+	# Allow bypass via explicit constraint
+	allow_outside_business_hours == true
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rate limiting policy
+# Tracks action rates per agent and action type
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Rate limit configuration (from policy data)
+# data.rate_limits.default_per_hour: 100
+# data.rate_limits.per_action.{"action_name": limit}
+# Input should include: input.rate_limit_state.{action}.count
+
+default_rate_limit := r if {
+	is_object(data.rate_limits)
+	r := object.get(data.rate_limits, "default_per_hour", 100)
+}
+
+default_rate_limit := 999999 if {
+	not is_object(data.rate_limits)  # No rate limiting configured, effectively unlimited
+}
+
+action_rate_limit := limit if {
+	is_object(data.rate_limits)
+	limits := object.get(data.rate_limits, "per_action", {})
+	limit := object.get(limits, act, default_rate_limit)
+}
+
+action_rate_limit := default_rate_limit if {
+	not is_object(data.rate_limits)
+}
+
+current_action_count := c if {
+	is_object(input.rate_limit_state)
+	c := number_or_default(object.get(input.rate_limit_state, act, 0), 0)
+}
+
+current_action_count := 0 if {
+	not is_object(input.rate_limit_state)
+}
+
+rate_limit_valid if {
+	current_action_count < action_rate_limit
+}
+
+# Helper to safely get bypass_rate_limit constraint
+bypass_rate_limit := object.get(constraints, "bypass_rate_limit", false)
+
+rate_limit_valid if {
+	# Allow bypass via explicit constraint
+	bypass_rate_limit == true
+}
+
+# Rate limit exceeded reason
+rate_limit_exceeded if {
+	current_action_count >= action_rate_limit
+	bypass_rate_limit == false
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Approval expiration validation
+# Time-bound approvals must be recent (within 5 minutes by default)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Approval window configuration
+approval_window_seconds := w if {
+	is_object(data.time_policy)
+	w := object.get(data.time_policy, "approval_window_seconds", 300)
+}
+
+approval_window_seconds := 86400 if {  # 24 hours - effectively disabled when not configured
+	not is_object(data.time_policy)
+}
+
+# Safe access to leg.approval and leg.dual_control
+leg_approval := object.get(leg, "approval", null)
+leg_dual_control := object.get(leg, "dual_control", null)
+
+# Check if approval timestamp is within window
+approval_timestamp := t if {
+	is_object(leg_approval)
+	t := number_or_default(leg_approval.timestamp, 0)
+}
+
+approval_timestamp := t if {
+	not is_object(leg_approval)
+	is_object(leg_dual_control)
+	is_array(leg_dual_control.approvers)
+	count(leg_dual_control.approvers) > 0
+	# Use the oldest approval timestamp (if timestamps exist)
+	timestamps := [ts | some i; ts := leg_dual_control.approvers[i].timestamp; is_number(ts)]
+	count(timestamps) > 0
+	t := min(timestamps)
+}
+
+approval_timestamp := 0 if {
+	not is_object(leg_approval)
+	is_object(leg_dual_control)
+	is_array(leg_dual_control.approvers)
+	count(leg_dual_control.approvers) > 0
+	# No timestamps in approvers - treat as no timestamp
+	timestamps := [ts | some i; ts := leg_dual_control.approvers[i].timestamp; is_number(ts)]
+	count(timestamps) == 0
+}
+
+approval_timestamp := 0 if {
+	not is_object(leg_approval)
+	not is_object(leg_dual_control)
+}
+
+approval_time_valid if {
+	# Low-risk doesn't require approval, so no time check
+	action_risk_tier == "low"
+}
+
+approval_time_valid if {
+	# No approval provided, time check not applicable
+	approval_timestamp == 0
+}
+
+approval_time_valid if {
+	# Approval is within the allowed window
+	approval_timestamp > 0
+	time_since_approval := current_time_unix - approval_timestamp
+	time_since_approval <= approval_window_seconds
+	time_since_approval >= 0  # Approval can't be in the future
+}
+
+# Approval expired reason
+approval_expired if {
+	approval_timestamp > 0
+	time_since_approval := current_time_unix - approval_timestamp
+	time_since_approval > approval_window_seconds
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Combined time-based validation
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Time policy is valid if there are no violations
+time_policy_valid if {
+	count(time_policy_violations_list) == 0
+}
+
+# Collect all time policy violations into a list
+time_policy_violations_list[reason] if {
+	not business_hours_valid
+	reason := "outside_business_hours"
+}
+
+time_policy_violations_list[reason] if {
+	rate_limit_exceeded
+	reason := sprintf("rate_limit_exceeded:%d/%d", [current_action_count, action_rate_limit])
+}
+
+time_policy_violations_list[reason] if {
+	approval_expired
+	time_since := current_time_unix - approval_timestamp
+	reason := sprintf("approval_expired:%ds_ago", [time_since])
+}
+
+# Backward-compatible time_policy_violation set
+time_policy_violation[reason] if {
+	not business_hours_valid
+	reason := "outside_business_hours"
+}
+
+time_policy_violation[reason] if {
+	rate_limit_exceeded
+	reason := sprintf("rate_limit_exceeded:%d/%d", [current_action_count, action_rate_limit])
+}
+
+time_policy_violation[reason] if {
+	approval_expired
+	time_since := current_time_unix - approval_timestamp
+	reason := sprintf("approval_expired:%ds_ago", [time_since])
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

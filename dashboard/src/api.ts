@@ -256,3 +256,120 @@ export async function rejectRequest(requestId: string, reason: string): Promise<
   });
   return res.json();
 }
+
+// POA Verification API
+export interface PoaVerificationResult {
+  valid: boolean;
+  signatureValid: boolean;
+  expired: boolean;
+  revoked: boolean;
+  riskTier: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  checks: {
+    name: string;
+    passed: boolean;
+    message: string;
+  }[];
+  policyEvaluation?: {
+    decision: 'allow' | 'deny';
+    reason?: string;
+    timePolicyViolations?: string[];
+  };
+}
+
+export async function verifyPoa(token: string, action?: string): Promise<PoaVerificationResult> {
+  if (MOCK_MODE) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Parse token to determine mock result
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return {
+        valid: false,
+        signatureValid: false,
+        expired: false,
+        revoked: false,
+        riskTier: 'LOW',
+        checks: [
+          { name: 'Format', passed: false, message: 'Invalid JWT format' },
+        ],
+      };
+    }
+
+    try {
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      const isExpired = payload.exp && payload.exp < Date.now() / 1000;
+      const isRevoked = Math.random() < 0.05; // 5% chance of revoked for demo
+      
+      // Determine risk tier from action
+      const riskTier = action?.includes('vendor.bank_change') ? 'HIGH' 
+        : action?.includes('org.structure') ? 'CRITICAL'
+        : action?.includes('vendor') ? 'MEDIUM' 
+        : 'LOW';
+
+      // Build checks list
+      const checks = [
+        { name: 'Format', passed: true, message: 'Valid JWT structure' },
+        { name: 'Signature', passed: !isRevoked, message: isRevoked ? 'Signature verification failed' : 'ES256 signature verified' },
+        { name: 'Expiration', passed: !isExpired, message: isExpired ? `Token expired at ${new Date(payload.exp * 1000).toISOString()}` : 'Token is not expired' },
+        { name: 'Revocation', passed: !isRevoked, message: isRevoked ? 'Token has been revoked' : 'Token is not revoked' },
+        { name: 'Legal Grounding', passed: !!payload.leg, message: payload.leg ? 'Legal basis present' : 'Missing legal grounding claim' },
+        { name: 'Constraints', passed: true, message: payload.con ? 'Constraints defined' : 'No constraints (unrestricted)' },
+        { name: 'Issuer', passed: !!payload.iss, message: payload.iss ? `Issued by ${payload.iss}` : 'Missing issuer claim' },
+      ];
+
+      // Add risk tier checks
+      if (riskTier === 'CRITICAL') {
+        const hasExecutiveApproval = payload.leg?.executive_control?.approvers?.length >= 2;
+        checks.push({
+          name: 'Executive Approval',
+          passed: hasExecutiveApproval,
+          message: hasExecutiveApproval ? '2+ executive approvers present' : 'Critical actions require executive approval',
+        });
+      }
+
+      if (riskTier === 'HIGH') {
+        const hasDualControl = payload.leg?.dual_control?.approvers?.length >= 2;
+        checks.push({
+          name: 'Dual Control',
+          passed: hasDualControl,
+          message: hasDualControl ? 'Dual control requirement met' : 'High-risk actions require dual control',
+        });
+      }
+
+      const valid = !isExpired && !isRevoked && checks.every(c => c.passed);
+
+      return {
+        valid,
+        signatureValid: !isRevoked,
+        expired: isExpired,
+        revoked: isRevoked,
+        riskTier,
+        checks,
+        policyEvaluation: {
+          decision: valid ? 'allow' : 'deny',
+          reason: !valid ? checks.find(c => !c.passed)?.message : undefined,
+          timePolicyViolations: isExpired ? ['approval_expired'] : [],
+        },
+      };
+    } catch {
+      return {
+        valid: false,
+        signatureValid: false,
+        expired: false,
+        revoked: false,
+        riskTier: 'LOW',
+        checks: [
+          { name: 'Format', passed: false, message: 'Failed to parse token payload' },
+        ],
+      };
+    }
+  }
+
+  const res = await fetch(`${API_BASE}/poa/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, action }),
+  });
+  return res.json();
+}
+

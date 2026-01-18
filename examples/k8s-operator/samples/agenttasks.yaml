@@ -1,0 +1,124 @@
+# Example AgentTask: Scale a deployment
+# This task would be submitted by an AI agent to scale a deployment
+apiVersion: atb.siemens.com/v1alpha1
+kind: AgentTask
+metadata:
+  name: scale-web-frontend
+  namespace: production
+  labels:
+    agent: planning-agent
+    workflow: auto-scaling
+spec:
+  agentId: "spiffe://atb.example.com/agent/planning-agent"
+  poaToken: "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."  # Replace with actual PoA
+  action: scale
+  target:
+    kind: Deployment
+    name: web-frontend
+    namespace: production
+  payload:
+    replicas: 5
+---
+# Example AgentTask: Restart a deployment
+apiVersion: atb.siemens.com/v1alpha1
+kind: AgentTask
+metadata:
+  name: restart-api-server
+  namespace: production
+  labels:
+    agent: ops-agent
+    workflow: incident-response
+spec:
+  agentId: "spiffe://atb.example.com/agent/ops-agent"
+  poaToken: "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+  action: restart
+  target:
+    kind: Deployment
+    name: api-server
+    namespace: production
+---
+# Example AgentTask: Update ConfigMap
+apiVersion: atb.siemens.com/v1alpha1
+kind: AgentTask
+metadata:
+  name: update-feature-flags
+  namespace: production
+  labels:
+    agent: config-agent
+    workflow: feature-rollout
+spec:
+  agentId: "spiffe://atb.example.com/agent/config-agent"
+  poaToken: "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+  action: update-config
+  target:
+    kind: ConfigMap
+    name: feature-flags
+    namespace: production
+  payload:
+    data:
+      new-feature-enabled: "true"
+      rollout-percentage: "25"
+---
+# Example AgentTask: Deploy new version (HIGH risk - requires approval)
+apiVersion: atb.siemens.com/v1alpha1
+kind: AgentTask
+metadata:
+  name: deploy-v2-release
+  namespace: production
+  labels:
+    agent: release-agent
+    workflow: continuous-deployment
+    risk-tier: high
+spec:
+  agentId: "spiffe://atb.example.com/agent/release-agent"
+  poaToken: "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+  action: deploy
+  target:
+    kind: Deployment
+    name: payment-service
+    namespace: production
+  payload:
+    manifest:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: payment-service
+        namespace: production
+      spec:
+        replicas: 3
+        selector:
+          matchLabels:
+            app: payment-service
+        template:
+          metadata:
+            labels:
+              app: payment-service
+              version: v2.0.0
+          spec:
+            containers:
+              - name: payment-service
+                image: ghcr.io/company/payment-service:v2.0.0
+                ports:
+                  - containerPort: 8080
+---
+# Example AgentTask: Rollback to previous version
+apiVersion: atb.siemens.com/v1alpha1
+kind: AgentTask
+metadata:
+  name: rollback-payment-service
+  namespace: production
+  labels:
+    agent: ops-agent
+    workflow: incident-response
+    risk-tier: high
+spec:
+  agentId: "spiffe://atb.example.com/agent/ops-agent"
+  poaToken: "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+  action: rollback
+  target:
+    kind: Deployment
+    name: payment-service
+    namespace: production
+  payload:
+    revision: 3
+    reason: "Performance regression detected in v2.0.0"
