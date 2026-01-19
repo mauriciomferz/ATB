@@ -321,21 +321,21 @@ func authenticateApprover(r *http.Request, config ApproverAuthConfig) (string, e
 
 // AuditEvent represents a structured audit log entry
 type AuditEvent struct {
-	Timestamp       string                 `json:"timestamp"`
-	Event           string                 `json:"event"`
-	ChallengeID     string                 `json:"challenge_id,omitempty"`
-	MandateID       string                 `json:"mandate_id,omitempty"`
-	AgentSPIFFEID   string                 `json:"agent_spiffe_id,omitempty"`
-	Action          string                 `json:"action,omitempty"`
-	Constraints     map[string]interface{} `json:"constraints,omitempty"`
-	RiskTier        string                 `json:"risk_tier,omitempty"`
-	RequiresDualControl bool              `json:"requires_dual_control,omitempty"`
-	ApproverID      string                 `json:"approver_id,omitempty"`
-	ApproversCount  int                    `json:"approvers_count,omitempty"`
-	SourceIP        string                 `json:"source_ip,omitempty"`
-	Success         bool                   `json:"success"`
-	Reason          string                 `json:"reason,omitempty"`
-	ExpiresAt       string                 `json:"expires_at,omitempty"`
+	Timestamp           string                 `json:"timestamp"`
+	Event               string                 `json:"event"`
+	ChallengeID         string                 `json:"challenge_id,omitempty"`
+	MandateID           string                 `json:"mandate_id,omitempty"`
+	AgentSPIFFEID       string                 `json:"agent_spiffe_id,omitempty"`
+	Action              string                 `json:"action,omitempty"`
+	Constraints         map[string]interface{} `json:"constraints,omitempty"`
+	RiskTier            string                 `json:"risk_tier,omitempty"`
+	RequiresDualControl bool                   `json:"requires_dual_control,omitempty"`
+	ApproverID          string                 `json:"approver_id,omitempty"`
+	ApproversCount      int                    `json:"approvers_count,omitempty"`
+	SourceIP            string                 `json:"source_ip,omitempty"`
+	Success             bool                   `json:"success"`
+	Reason              string                 `json:"reason,omitempty"`
+	ExpiresAt           string                 `json:"expires_at,omitempty"`
 }
 
 // auditLog outputs a structured JSON audit event to stdout
@@ -372,12 +372,12 @@ type Approver struct {
 }
 
 type Challenge struct {
-	ID                 string
-	Req                ChallengeRequest
-	CreatedAt          time.Time
-	ExpiresAt          time.Time
-	Approved           bool
-	Approvers          []Approver // For dual control: need 2 distinct approvers
+	ID                  string
+	Req                 ChallengeRequest
+	CreatedAt           time.Time
+	ExpiresAt           time.Time
+	Approved            bool
+	Approvers           []Approver // For dual control: need 2 distinct approvers
 	RequiresDualControl bool
 }
 
@@ -464,11 +464,11 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const (
-	maxBodySize      = 1 << 20 // 1MB
-	maxJSONDepth     = 10
-	maxStringLength  = 4096
-	maxSPIFFELength  = 512
-	maxActionLength  = 256
+	maxBodySize     = 1 << 20 // 1MB
+	maxJSONDepth    = 10
+	maxStringLength = 4096
+	maxSPIFFELength = 512
+	maxActionLength = 256
 )
 
 // readJSON reads and validates JSON input with size and depth limits
@@ -556,8 +556,8 @@ func validateJSONDepth(v interface{}, depth int) error {
 
 // requiresDualControl checks if the request requires two approvers.
 // This is determined by:
-//   1. leg.dual_control.required == true (explicit in request)
-//   2. Action is in the high-risk action list (configurable via env)
+//  1. leg.dual_control.required == true (explicit in request)
+//  2. Action is in the high-risk action list (configurable via env)
 func requiresDualControl(req ChallengeRequest, highRiskActions []string) bool {
 	// Check leg.dual_control.required
 	if dc, ok := req.Leg["dual_control"].(map[string]interface{}); ok {
@@ -626,7 +626,7 @@ func main() {
 	approvalToken := strings.TrimSpace(os.Getenv("APPROVAL_SHARED_SECRET"))
 
 	// Rate limiting configuration
-	rateLimitPerIP := 100  // requests per minute per IP
+	rateLimitPerIP := 100   // requests per minute per IP
 	rateLimitPerAgent := 20 // requests per minute per agent
 	if v := strings.TrimSpace(os.Getenv("RATE_LIMIT_PER_IP")); v != "" {
 		fmt.Sscanf(v, "%d", &rateLimitPerIP)
@@ -950,24 +950,24 @@ func main() {
 			riskTier = "high"
 		}
 		auditLog(AuditEvent{
-			Event:           "challenge.created",
-			ChallengeID:     c.ID,
-			AgentSPIFFEID:   req.AgentSPIFFEID,
-			Action:          req.Act,
-			Constraints:     req.Con,
-			RiskTier:        riskTier,
+			Event:               "challenge.created",
+			ChallengeID:         c.ID,
+			AgentSPIFFEID:       req.AgentSPIFFEID,
+			Action:              req.Act,
+			Constraints:         req.Con,
+			RiskTier:            riskTier,
 			RequiresDualControl: needsDualControl,
-			SourceIP:        getClientIP(r),
-			Success:         true,
-			ExpiresAt:       c.ExpiresAt.Format(time.RFC3339),
+			SourceIP:            getClientIP(r),
+			Success:             true,
+			ExpiresAt:           c.ExpiresAt.Format(time.RFC3339),
 		})
 
 		writeJSON(w, 200, map[string]interface{}{
-			"challenge_id":      c.ID,
-			"expires_at":        c.ExpiresAt.Format(time.RFC3339),
+			"challenge_id":          c.ID,
+			"expires_at":            c.ExpiresAt.Format(time.RFC3339),
 			"requires_dual_control": needsDualControl,
-			"approvers_needed":  approversNeeded,
-			"approval_hint":     "POST /v1/approve with challenge_id and approver identity",
+			"approvers_needed":      approversNeeded,
+			"approval_hint":         "POST /v1/approve with challenge_id and approver identity",
 		})
 	})
 
@@ -1064,24 +1064,24 @@ func main() {
 
 		// Audit: approval recorded
 		auditLog(AuditEvent{
-			Event:           "challenge.approved",
-			ChallengeID:     c.ID,
-			AgentSPIFFEID:   c.Req.AgentSPIFFEID,
-			Action:          c.Req.Act,
-			ApproverID:      approverID,
-			ApproversCount:  len(c.Approvers),
+			Event:               "challenge.approved",
+			ChallengeID:         c.ID,
+			AgentSPIFFEID:       c.Req.AgentSPIFFEID,
+			Action:              c.Req.Act,
+			ApproverID:          approverID,
+			ApproversCount:      len(c.Approvers),
 			RequiresDualControl: c.RequiresDualControl,
-			SourceIP:        getClientIP(r),
-			Success:         true,
-			Reason:          fmt.Sprintf("approver %d of %d", len(c.Approvers), approversNeeded),
+			SourceIP:            getClientIP(r),
+			Success:             true,
+			Reason:              fmt.Sprintf("approver %d of %d", len(c.Approvers), approversNeeded),
 		})
 
 		writeJSON(w, 200, map[string]interface{}{
-			"status":            "approved",
-			"approvers_count":   len(c.Approvers),
-			"approvers_needed":  approversNeeded,
-			"fully_approved":    c.Approved,
-			"approvers":         c.Approvers,
+			"status":           "approved",
+			"approvers_count":  len(c.Approvers),
+			"approvers_needed": approversNeeded,
+			"fully_approved":   c.Approved,
+			"approvers":        c.Approvers,
 		})
 	})
 
@@ -1118,9 +1118,9 @@ func main() {
 				approversNeeded = 2
 			}
 			writeJSON(w, http.StatusForbidden, map[string]interface{}{
-				"error":             "challenge not fully approved",
-				"approvers_count":   len(c.Approvers),
-				"approvers_needed":  approversNeeded,
+				"error":                 "challenge not fully approved",
+				"approvers_count":       len(c.Approvers),
+				"approvers_needed":      approversNeeded,
 				"requires_dual_control": c.RequiresDualControl,
 			})
 			return
@@ -1170,17 +1170,17 @@ func main() {
 
 		// Audit: mandate issued
 		auditLog(AuditEvent{
-			Event:           "mandate.issued",
-			ChallengeID:     c.ID,
-			MandateID:       claims.ID,
-			AgentSPIFFEID:   c.Req.AgentSPIFFEID,
-			Action:          c.Req.Act,
-			Constraints:     c.Req.Con,
+			Event:               "mandate.issued",
+			ChallengeID:         c.ID,
+			MandateID:           claims.ID,
+			AgentSPIFFEID:       c.Req.AgentSPIFFEID,
+			Action:              c.Req.Act,
+			Constraints:         c.Req.Con,
 			RequiresDualControl: c.RequiresDualControl,
-			ApproversCount:  len(c.Approvers),
-			SourceIP:        getClientIP(r),
-			Success:         true,
-			ExpiresAt:       exp.Time.Format(time.RFC3339),
+			ApproversCount:      len(c.Approvers),
+			SourceIP:            getClientIP(r),
+			Success:             true,
+			ExpiresAt:           exp.Time.Format(time.RFC3339),
 		})
 
 		writeJSON(w, 200, map[string]interface{}{
