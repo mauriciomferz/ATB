@@ -67,14 +67,15 @@ curl -k https://localhost:8443/health
 
 ### Step 2: Request a PoA Token
 
-For medium/high-risk actions, you need a Proof-of-Authorization (PoA) token:
+For medium/high-risk actions, you need a Proof-of-Authorization (PoA) token.
+Use the SPIFFE ID that matches your client certificate:
 
 ```bash
 # Request a challenge
 curl -X POST http://localhost:8444/v1/challenge \
   -H "Content-Type: application/json" \
   -d '{
-    "agent_spiffe_id": "spiffe://example.org/agent/demo",
+    "agent_spiffe_id": "spiffe://example.org/ns/default/sa/agent/connector",
     "act": "crm.contact.read",
     "con": {},
     "leg": {
@@ -153,12 +154,24 @@ Response:
 
 ### Step 5: Make an Authorized Request
 
-Include the PoA token in the `Authorization` header:
+Include the PoA token in the `Authorization` header. The broker validates that the
+token's `sub` claim matches your client certificate's SPIFFE ID:
 
 ```bash
-curl http://localhost:8080/crm/contacts \
-  -H "Authorization: Bearer eyJhbGciOiJFZERTQSIsImtpZCI6Ii4uLiIsInR5cCI6IkpXVCJ9..."
+# Using mTLS (production-like)
+curl -sk https://localhost:8443/crm/contacts \
+  --cert dev/certs/client.crt \
+  --key dev/certs/client.key \
+  --cacert dev/certs/ca.crt \
+  -H "Authorization: Bearer <your-poa-token>"
+
+# Response from upstream:
+# {"ok":true,"method":"GET","path":"/crm/contacts"}
 ```
+
+> **Note:** The PoA token's `sub` claim must match the SPIFFE URI SAN in your client
+> certificate. For dev certs, use `spiffe://example.org/ns/default/sa/agent/connector`
+> when creating the challenge.
 
 ## Understanding Risk Tiers
 
