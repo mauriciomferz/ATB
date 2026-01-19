@@ -49,7 +49,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r atb-gateway-py/requirements.txt
 
 # Run OPA tests
-opa test opa/policy/ -v --v0-compatible
+opa test opa/policy/ -v
 
 # Run Go tests
 cd atb-gateway-go && go test -v -race ./... && cd ..
@@ -121,7 +121,7 @@ make test
 
 # Or manually:
 # OPA tests
-opa test opa/policy/ -v --v0-compatible
+opa test opa/policy/ -v
 
 # Go tests
 cd atb-gateway-go && go test -v -race ./... && cd ..
@@ -276,7 +276,7 @@ deny contains msg if {
 ```
 
 2. Create test file `opa/policy/templates/your_platform_test.rego`
-3. Run tests: `opa test opa/policy/templates/ -v --v0-compatible`
+3. Run tests: `opa test opa/policy/templates/ -v`
 4. Document in `opa/policy/templates/README.md`
 
 ## Go Code Contribution Guide

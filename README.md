@@ -104,11 +104,12 @@ kubectl logs -n atb -l app=atb-broker
 
 ## Risk Tiers
 
-| Tier       | Actions | Approval                   | Examples                                 |
-| ---------- | ------- | -------------------------- | ---------------------------------------- |
-| **High**   | 60+     | Dual control (2 approvers) | SAP payments, PII export, IAM escalation |
-| **Medium** | 40+     | Single approver            | CRM updates, order management            |
-| **Low**    | 45+     | PoA only                   | Read operations, status checks           |
+| Tier         | Actions | Approval                    | Examples                                      |
+| ------------ | ------- | --------------------------- | --------------------------------------------- |
+| **Critical** | 30+     | Executive control (2+ exec) | M&A, major restructuring, data center changes |
+| **High**     | 60+     | Dual control (2 approvers)  | SAP payments, PII export, IAM escalation      |
+| **Medium**   | 40+     | Single approver             | CRM updates, order management                 |
+| **Low**      | 50+     | PoA only                    | Read operations, status checks                |
 
 See [`docs/enterprise-actions.md`](docs/enterprise-actions.md) for the complete catalog.
 
@@ -155,7 +156,8 @@ The policy engine enforces:
 ### Run Policy Tests
 
 ```bash
-opa test opa/policy/ -v --v0-compatible
+# Run all 100 OPA policy tests
+opa test opa/policy/ -v
 ```
 
 ### Policy Templates
@@ -208,7 +210,11 @@ The ATB Dashboard provides human-in-the-loop approval for high-risk actions:
 - **Audit context** - Full action details, justification, constraints
 - **Approve/Reject** - Immediate enforcement via ATB broker
 
-Access the approvals page at: `http://localhost:3003/approvals`
+Access the dashboard at: `http://localhost:3003/`
+
+- **Overview** - Real-time metrics and system health
+- **Approvals** - Pending approval queue at `/approvals`
+- **Audit Log** - Action history and compliance at `/audit`
 
 ## IdP Federation
 

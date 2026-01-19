@@ -130,10 +130,10 @@ deny[msg] {
 
 ```bash
 # Test all templates
-opa test opa/policy/templates/ -v --v0-compatible
+opa test opa/policy/templates/ -v
 
 # Test specific template
-opa test opa/policy/templates/sap.rego -v --v0-compatible
+opa test opa/policy/templates/sap.rego -v
 ```
 
 ## Customization

@@ -79,7 +79,7 @@ code opa/policy/poa.rego
 make test-opa
 
 # Or directly
-opa test opa/policy/ -v --v0-compatible
+opa test opa/policy/ -v
 ```
 
 ### 3. Modify Broker Code

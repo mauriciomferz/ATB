@@ -126,8 +126,8 @@ opa:
     repository: openpolicyagent/opa
     tag: "latest"
     pullPolicy: IfNotPresent
-  # Enable v0-compatible mode for legacy Rego policies (OPA 1.0+)
-  v0Compatible: true
+  # v0Compatible is deprecated - ATB uses Rego v1 syntax (OPA 1.0+ default)
+  # v0Compatible: false  # Not needed, Rego v1 is the default
   replicas: 1
   # Pod Disruption Budget
   podDisruptionBudget:
