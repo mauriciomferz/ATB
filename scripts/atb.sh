@@ -94,9 +94,9 @@ check_opa() {
 cmd_start() {
     local mode="${1:-full}"
     check_docker
-    
+
     echo -e "${GREEN}Starting ATB development environment (${mode})...${NC}"
-    
+
     case "$mode" in
         full)
             docker compose -f "$REPO_ROOT/docker-compose.yaml" up -d
@@ -110,7 +110,7 @@ cmd_start() {
             exit 1
             ;;
     esac
-    
+
     echo ""
     echo -e "${GREEN}Services started!${NC}"
     echo ""
@@ -119,7 +119,7 @@ cmd_start() {
 
 cmd_stop() {
     check_docker
-    
+
     echo -e "${YELLOW}Stopping ATB services...${NC}"
     docker compose -f "$REPO_ROOT/docker-compose.yaml" down 2>/dev/null || true
     docker compose -f "$REPO_ROOT/docker-compose.minimal.yaml" down 2>/dev/null || true
@@ -135,42 +135,42 @@ cmd_restart() {
 cmd_status() {
     echo -e "${BLUE}Service Status:${NC}"
     echo ""
-    
+
     # Check OPA
     if curl -s "$OPA_URL/health" >/dev/null 2>&1; then
         echo -e "  OPA:       ${GREEN}● Running${NC} ($OPA_URL)"
     else
         echo -e "  OPA:       ${RED}○ Stopped${NC}"
     fi
-    
+
     # Check Broker
     if curl -s "$BROKER_URL/health" >/dev/null 2>&1; then
         echo -e "  Broker:    ${GREEN}● Running${NC} ($BROKER_URL)"
     else
         echo -e "  Broker:    ${RED}○ Stopped${NC}"
     fi
-    
+
     # Check AgentAuth
     if curl -s "http://localhost:8444/health" >/dev/null 2>&1; then
         echo -e "  AgentAuth: ${GREEN}● Running${NC} (http://localhost:8444)"
     else
         echo -e "  AgentAuth: ${RED}○ Stopped${NC}"
     fi
-    
+
     # Check Upstream
     if curl -s "http://localhost:9000/health" >/dev/null 2>&1; then
         echo -e "  Upstream:  ${GREEN}● Running${NC} (http://localhost:9000)"
     else
         echo -e "  Upstream:  ${RED}○ Stopped${NC}"
     fi
-    
+
     echo ""
 }
 
 cmd_logs() {
     local service="${1:-}"
     check_docker
-    
+
     if [ -z "$service" ]; then
         docker compose -f "$REPO_ROOT/docker-compose.yaml" logs -f
     else
@@ -180,11 +180,11 @@ cmd_logs() {
 
 cmd_test() {
     local type="${1:-all}"
-    
+
     case "$type" in
         opa)
             echo -e "${BLUE}Running OPA tests...${NC}"
-            opa test "$REPO_ROOT/opa/policy/" -v --v0-compatible
+            opa test "$REPO_ROOT/opa/policy/" -v
             ;;
         go)
             echo -e "${BLUE}Running Go tests...${NC}"
@@ -208,15 +208,15 @@ cmd_test() {
             exit 1
             ;;
     esac
-    
+
     echo -e "${GREEN}Tests passed!${NC}"
 }
 
 cmd_mint() {
     local risk_tier="${1:-LOW}"
-    
+
     echo -e "${BLUE}Minting PoA token (risk tier: $risk_tier)...${NC}"
-    
+
     # Use the Python minting script
     if [ -f "$REPO_ROOT/.venv/bin/python" ]; then
         "$REPO_ROOT/.venv/bin/python" "$REPO_ROOT/dev/mint_poa.py" --risk-tier "$risk_tier"
@@ -227,21 +227,21 @@ cmd_mint() {
 
 cmd_query() {
     local action="${1:-}"
-    
+
     if [ -z "$action" ]; then
         echo -e "${RED}Usage: atb query <verb:resource>${NC}"
         echo "Example: atb query read:logs"
         exit 1
     fi
-    
+
     check_opa
-    
+
     # Parse action (format: verb:resource)
     local verb="${action%%:*}"
     local resource="${action#*:}"
-    
+
     echo -e "${BLUE}Querying OPA for: $verb $resource${NC}"
-    
+
     local input=$(cat <<EOF
 {
     "input": {
@@ -266,7 +266,7 @@ cmd_query() {
 }
 EOF
 )
-    
+
     curl -s -X POST "$OPA_URL/v1/data/poa/authorize" \
         -H "Content-Type: application/json" \
         -d "$input" | python3 -m json.tool
@@ -288,7 +288,7 @@ cmd_demo() {
 main() {
     local cmd="${1:-help}"
     shift || true
-    
+
     case "$cmd" in
         start)      cmd_start "$@" ;;
         stop)       cmd_stop ;;

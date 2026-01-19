@@ -20,7 +20,6 @@ services:
       - "--server"
       - "--addr=0.0.0.0:8181"
       - "--log-level=debug"
-      - "--v0-compatible"
       - "/policy/poa.rego"
     healthcheck:
       test: ["CMD", "/opa", "eval", "true"]

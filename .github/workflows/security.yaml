@@ -128,10 +128,10 @@ jobs:
           version: latest
 
       - name: Check OPA policy syntax
-        run: opa check --v0-compatible opa/policy/
+        run: opa check opa/policy/
 
       - name: Run OPA tests
-        run: opa test opa/policy/ -v --v0-compatible
+        run: opa test opa/policy/ -v
 
   # Helm chart security
   helm-security:

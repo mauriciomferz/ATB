@@ -34,15 +34,15 @@ echo -e "${YELLOW}Validating OPA policies...${NC}"
 
 if command -v opa &> /dev/null; then
     # Check syntax (with v0 compatibility for legacy policies)
-    if opa check --v0-compatible "$REPO_ROOT/opa/policy/"; then
+    if opa check "$REPO_ROOT/opa/policy/"; then
         echo -e "${GREEN}✓ OPA policy syntax valid${NC}"
     else
         echo -e "${RED}✗ OPA policy syntax errors${NC}"
         ((ERRORS++))
     fi
-    
+
     # Run tests
-    if opa test "$REPO_ROOT/opa/policy/" -v --v0-compatible > /dev/null 2>&1; then
+    if opa test "$REPO_ROOT/opa/policy/" -v > /dev/null 2>&1; then
         echo -e "${GREEN}✓ OPA policy tests pass${NC}"
     else
         echo -e "${RED}✗ OPA policy tests failed${NC}"
@@ -66,7 +66,7 @@ if command -v helm &> /dev/null; then
         echo -e "${RED}✗ Helm chart validation failed${NC}"
         ((ERRORS++))
     fi
-    
+
     # Template with different values (warnings only - may fail due to missing secrets/values)
     for values_file in values.yaml values-staging.yaml values-prod.yaml; do
         if [ -f "$REPO_ROOT/charts/atb/$values_file" ]; then
@@ -156,7 +156,7 @@ if command -v go &> /dev/null; then
         echo -e "${RED}✗ Go module verification failed${NC}"
         ((ERRORS++))
     fi
-    
+
     if go vet ./... > /dev/null 2>&1; then
         echo -e "${GREEN}✓ Go vet passed${NC}"
     else
