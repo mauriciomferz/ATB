@@ -318,16 +318,16 @@ func init() {
 // - AWS S3 (with Object Lock in GOVERNANCE or COMPLIANCE mode)
 // - Generic HTTP endpoint with HMAC signature for integrity
 type ImmutableStorageSink struct {
-	backend        string // "azure", "s3", "http"
-	containerURL   string // Base URL: https://<account>.blob.core.windows.net/<container> or S3 bucket URL
-	authHeader     string // SAS token, AWS signature header, or Bearer token
-	httpClient     *http.Client
-	queue          chan AuditEvent
-	wg             sync.WaitGroup
-	stopCh         chan struct{}
-	retentionDays  int // Legal retention period (passed to storage layer)
-	hashChain      string
-	hashChainMu    sync.Mutex
+	backend       string // "azure", "s3", "http"
+	containerURL  string // Base URL: https://<account>.blob.core.windows.net/<container> or S3 bucket URL
+	authHeader    string // SAS token, AWS signature header, or Bearer token
+	httpClient    *http.Client
+	queue         chan AuditEvent
+	wg            sync.WaitGroup
+	stopCh        chan struct{}
+	retentionDays int // Legal retention period (passed to storage layer)
+	hashChain     string
+	hashChainMu   sync.Mutex
 }
 
 // AuditBatch represents a batch of events with integrity metadata
@@ -766,19 +766,19 @@ type ConstraintViolation struct {
 
 // ConstraintEnforcementConfig defines which constraints to enforce
 type ConstraintEnforcementConfig struct {
-	Enabled         bool     `json:"enabled"`
-	StrictMode      bool     `json:"strict_mode"`      // Fail if constraint exists but can't be validated
-	EnforceContactID bool    `json:"enforce_contact_id"`
-	EnforceAmount   bool     `json:"enforce_amount"`
-	EnforceResourceID bool   `json:"enforce_resource_id"`
+	Enabled           bool     `json:"enabled"`
+	StrictMode        bool     `json:"strict_mode"` // Fail if constraint exists but can't be validated
+	EnforceContactID  bool     `json:"enforce_contact_id"`
+	EnforceAmount     bool     `json:"enforce_amount"`
+	EnforceResourceID bool     `json:"enforce_resource_id"`
 	CustomConstraints []string `json:"custom_constraints"` // Additional constraint keys to enforce
 }
 
 var constraintConfig = ConstraintEnforcementConfig{
-	Enabled:          true,
-	StrictMode:       false,
-	EnforceContactID: true,
-	EnforceAmount:    true,
+	Enabled:           true,
+	StrictMode:        false,
+	EnforceContactID:  true,
+	EnforceAmount:     true,
 	EnforceResourceID: true,
 }
 
@@ -1902,10 +1902,10 @@ type GuardrailsRequest struct {
 
 // GuardrailsResponse from the guardrails service
 type GuardrailsResponse struct {
-	Safe    bool   `json:"safe"`
-	Reason  string `json:"reason,omitempty"`
-	Score   float64 `json:"score,omitempty"`
-	Category string `json:"category,omitempty"`
+	Safe     bool    `json:"safe"`
+	Reason   string  `json:"reason,omitempty"`
+	Score    float64 `json:"score,omitempty"`
+	Category string  `json:"category,omitempty"`
 }
 
 var guardrailsClient *GuardrailsClient
@@ -2603,6 +2603,7 @@ func main() {
 		proxy.ServeHTTP(w, r)
 	})
 
+	// Health and metrics mux
 	healthMux := http.NewServeMux()
 	healthMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -2619,6 +2620,28 @@ func main() {
 		_, _ = w.Write([]byte("ready\n"))
 	})
 	healthMux.Handle("/metrics", promhttp.Handler())
+
+	// Combined mux for HTTP server (health + proxy for dev mode)
+	httpMux := http.NewServeMux()
+	httpMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	httpMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 1200*time.Millisecond)
+		defer cancel()
+		if err := checkHTTPHealth(ctx, httpClient, opaHealthURL); err != nil {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("ready\n"))
+	})
+	httpMux.Handle("/metrics", promhttp.Handler())
+	// Proxy all other requests through the main handler (for dev mode without mTLS)
+	httpMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r)
+	})
 
 	mtlsServer := &http.Server{
 		Addr:              listenAddr,
@@ -2664,7 +2687,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:              httpListenAddr,
-		Handler:           healthMux,
+		Handler:           httpMux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

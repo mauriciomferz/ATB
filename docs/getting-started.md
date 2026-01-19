@@ -79,7 +79,7 @@ curl -X POST http://localhost:8444/v1/challenge \
     "con": {},
     "leg": {
       "basis": "contract",
-      "jurisdiction": "US",
+      "jurisdiction": "EU",
       "accountable_party": {
         "type": "human",
         "id": "user@example.com"
@@ -201,7 +201,7 @@ ATB includes a web-based dashboard for monitoring and approving requests:
 cd dashboard && npm install && npm run dev
 ```
 
-Access at: http://localhost:3003
+Access at: <http://localhost:3003>
 
 ### Dashboard Pages
 
@@ -215,7 +215,7 @@ Access at: http://localhost:3003
 
 ### Using the Approvals Page
 
-1. Navigate to http://localhost:3003/approvals
+1. Navigate to <http://localhost:3003/approvals>
 2. View pending requests with risk tier indicators
 3. Click a request to see full details
 4. Approve or Reject with immediate enforcement
@@ -258,7 +258,7 @@ See [Python SDK Documentation](../sdk/python/README.md) for details.
 
 If you see this error:
 
-```
+```text
 Error response from daemon: ports are not available: exposing port TCP 0.0.0.0:9000
 ```
 
@@ -280,7 +280,7 @@ upstream:
 
 If you see LibreSSL errors like:
 
-```
+```text
 curl: (35) LibreSSL/3.3.6: error:1404B42E:SSL routines
 ```
 

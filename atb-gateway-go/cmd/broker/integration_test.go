@@ -149,8 +149,8 @@ func TestBrokerOPAIntegration(t *testing.T) {
 			expectedAllow: true,
 		},
 		{
-			name:   "missing_legal_basis_denied",
-			action: "system.status.read",
+			name:     "missing_legal_basis_denied",
+			action:   "system.status.read",
 			legBasis: map[string]interface{}{
 				// Missing required fields
 			},

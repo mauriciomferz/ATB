@@ -48,13 +48,13 @@ const (
 
 // ManagedKey represents a key with lifecycle metadata.
 type ManagedKey struct {
-	Kid       string        `json:"kid"`
-	State     KeyState      `json:"state"`
-	CreatedAt time.Time     `json:"created_at"`
-	ExpiresAt time.Time     `json:"expires_at,omitempty"`
-	RevokedAt time.Time     `json:"revoked_at,omitempty"`
-	PublicKey interface{}   `json:"-"` // *rsa.PublicKey or *ecdsa.PublicKey
-	PrivateKey interface{}  `json:"-"` // *rsa.PrivateKey or *ecdsa.PrivateKey (only for active/rotating)
+	Kid        string      `json:"kid"`
+	State      KeyState    `json:"state"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ExpiresAt  time.Time   `json:"expires_at,omitempty"`
+	RevokedAt  time.Time   `json:"revoked_at,omitempty"`
+	PublicKey  interface{} `json:"-"` // *rsa.PublicKey or *ecdsa.PublicKey
+	PrivateKey interface{} `json:"-"` // *rsa.PrivateKey or *ecdsa.PrivateKey (only for active/rotating)
 }
 
 // KeyManager manages signing keys with rotation support.
