@@ -314,10 +314,10 @@ make certs-poa
 
 ```bash
 # Check policy syntax
-opa check --v0-compatible opa/policy/
+opa check opa/policy/
 
 # Run policy tests
-opa test opa/policy/ -v --v0-compatible
+opa test opa/policy/ -v
 ```
 
 See [Troubleshooting Guide](troubleshooting.md) for more solutions.

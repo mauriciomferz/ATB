@@ -32,7 +32,6 @@ spec:
             - "--addr=0.0.0.0:8181"
             - "--log-level=info"
             - "--log-format=json"
-            - "--v0-compatible"
             - "/policies"
           ports:
             - name: http

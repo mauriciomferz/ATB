@@ -749,7 +749,7 @@ make docker-up
     
     story.append(Paragraph("OPA Policy Issues", h3_style))
     story.append(Paragraph("Check policy syntax and run tests:", body_style))
-    opa_fix = "opa check opa/policy/<br/>opa test opa/policy/ -v --v0-compatible"
+    opa_fix = "opa check opa/policy/<br/>opa test opa/policy/ -v"
     story.append(Paragraph(opa_fix, code_style))
     
     # Build PDF

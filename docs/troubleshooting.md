@@ -75,7 +75,7 @@ openssl x509 -in dev/certs/client.crt -text -noout | grep -A1 "Subject Alternati
 opa check opa/policy/
 
 # Run tests with verbose output
-opa test opa/policy/ -v --v0-compatible
+opa test opa/policy/ -v
 ```
 
 **Problem**: `rego_parse_error`
@@ -212,7 +212,7 @@ curl -X POST http://localhost:8181/v1/data/atb/poa/decision \
 opa version
 
 # Run tests with same flags as CI
-opa test opa/policy/ -v --v0-compatible
+opa test opa/policy/ -v
 ```
 
 **Problem**: Go tests fail with race conditions
@@ -331,19 +331,19 @@ kubectl create secret tls atb-broker-tls \
   --cert=tls.crt --key=tls.key -n <namespace>
 ```
 
-### OPA Unknown Flag Error
+### OPA Rego v1 Syntax
 
-**Problem**: `unknown flag: --v0-compatible`
-
-OPA version is too old (pre-1.0). The `--v0-compatible` flag was added in OPA 1.0.
+**Note**: ATB policies use Rego v1 syntax. OPA 1.0+ defaults to Rego v1, so no compatibility flags are needed.
 
 ```bash
-# Update OPA image to latest
-helm upgrade ... --set opa.image.tag=latest
+# Run policy tests (Rego v1 is the default)
+opa test opa/policy/ -v
 
-# Or disable v0Compatible if using newer Rego syntax
-helm upgrade ... --set opa.v0Compatible=false
+# Check policy syntax
+opa check opa/policy/
 ```
+
+If you encounter parse errors like `var cannot be used for rule name`, ensure you're using OPA 1.0+ and NOT using the deprecated `--v0-compatible` flag.
 
 ### AgentAuth CrashLoopBackOff
 

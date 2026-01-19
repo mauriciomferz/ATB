@@ -29,7 +29,7 @@ npm run build
 
 ## Development
 
-The dashboard runs on http://localhost:3000 and proxies API requests to the ATB broker.
+The dashboard runs on http://localhost:3003 and proxies API requests to the ATB broker.
 
 ### Environment Variables
 

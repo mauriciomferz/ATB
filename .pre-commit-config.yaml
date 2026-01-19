@@ -59,7 +59,7 @@ repos:
 
       - id: opa-test
         name: OPA Test
-        entry: bash -c 'opa test opa/policy/ --v0-compatible'
+        entry: bash -c 'opa test opa/policy/'
         language: system
         files: '\.rego$'
         pass_filenames: false
