@@ -83,14 +83,14 @@ jobs:
           version: latest
 
       - name: OPA check (syntax validation)
-        run: opa check --v0-compatible opa/policy/
+        run: opa check opa/policy/
 
       - name: OPA test (policy unit tests)
-        run: opa test opa/policy/ -v --v0-compatible
+        run: opa test opa/policy/ -v
 
       - name: OPA coverage report
         run: |
-          opa test opa/policy/ --coverage --format=json --v0-compatible > coverage.json
+          opa test opa/policy/ --coverage --format=json > coverage.json
           echo "### OPA Policy Coverage" >> $GITHUB_STEP_SUMMARY
           echo '```json' >> $GITHUB_STEP_SUMMARY
           cat coverage.json | jq '.coverage' >> $GITHUB_STEP_SUMMARY

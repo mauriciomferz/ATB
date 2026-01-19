@@ -28,7 +28,6 @@ services:
       - "--server"
       - "--addr=0.0.0.0:8181"
       - "--log-level=info"
-      - "--v0-compatible"
       - "/policy/poa.rego"
     healthcheck:
       test: ["CMD", "/opa", "eval", "true"]

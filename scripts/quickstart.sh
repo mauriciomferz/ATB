@@ -188,7 +188,7 @@ echo -e "${YELLOW}Running tests...${NC}"
 
 # OPA tests
 echo "  Running OPA policy tests..."
-opa test opa/policy/ -v --v0-compatible
+opa test opa/policy/ -v
 echo -e "${GREEN}✓ OPA tests passed${NC}"
 
 # Go tests
@@ -229,10 +229,10 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     opa run --server --addr 127.0.0.1:8181 opa/policy/poa.rego &
     OPA_PID=$!
     sleep 2
-    
+
     echo ""
     ./dev/demo.sh
-    
+
     echo ""
     echo -e "${YELLOW}Stopping OPA...${NC}"
     kill $OPA_PID 2>/dev/null || true

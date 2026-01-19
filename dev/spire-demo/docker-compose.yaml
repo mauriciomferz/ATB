@@ -23,7 +23,7 @@ services:
 
   # OPA for policy decisions
   opa:
-    image: openpolicyagent/opa:0.60.0
+    image: openpolicyagent/opa:latest
     platform: linux/amd64
     command:
       - "run"
