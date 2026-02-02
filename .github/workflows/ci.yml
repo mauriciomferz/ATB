@@ -45,7 +45,7 @@ jobs:
         run: go build -o agentauth ./cmd/agentauth
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: atb-gateway-go/coverage.out
           flags: go-services
@@ -73,7 +73,7 @@ jobs:
         run: go test -v -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: sdk/go/coverage.out
           flags: go-sdk
@@ -104,7 +104,7 @@ jobs:
         run: pytest --cov=app --cov-report=xml -v
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: atb-gateway-py/coverage.xml
           flags: python-gateway
@@ -143,7 +143,7 @@ jobs:
         run: pytest --cov=atb --cov-report=xml -v
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: sdk/python/coverage.xml
           flags: python-sdk-${{ matrix.python-version }}
