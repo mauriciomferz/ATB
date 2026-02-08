@@ -279,7 +279,7 @@ export interface PoaVerificationResult {
 export async function verifyPoa(token: string, action?: string): Promise<PoaVerificationResult> {
   if (MOCK_MODE) {
     await new Promise(resolve => setTimeout(resolve, 300));
-    
+
     // Parse token to determine mock result
     const parts = token.split('.');
     if (parts.length !== 3) {
@@ -299,12 +299,21 @@ export async function verifyPoa(token: string, action?: string): Promise<PoaVeri
       const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
       const isExpired = payload.exp && payload.exp < Date.now() / 1000;
       const isRevoked = Math.random() < 0.05; // 5% chance of revoked for demo
-      
+
       // Determine risk tier from action
-      const riskTier = action?.includes('vendor.bank_change') ? 'HIGH' 
+      const riskTier = action?.includes('vendor.bank_change') ? 'HIGH'
         : action?.includes('org.structure') ? 'CRITICAL'
-        : action?.includes('vendor') ? 'MEDIUM' 
+        : action?.includes('vendor') ? 'MEDIUM'
         : 'LOW';
+
+      // Helper to check if an object has actual content (not empty)
+      const hasContent = (obj: unknown): boolean => {
+        if (!obj || typeof obj !== 'object') return false;
+        return Object.keys(obj as object).length > 0;
+      };
+
+      const hasLegalGrounding = hasContent(payload.leg);
+      const hasConstraints = hasContent(payload.con);
 
       // Build checks list
       const checks = [
@@ -312,8 +321,8 @@ export async function verifyPoa(token: string, action?: string): Promise<PoaVeri
         { name: 'Signature', passed: !isRevoked, message: isRevoked ? 'Signature verification failed' : 'ES256 signature verified' },
         { name: 'Expiration', passed: !isExpired, message: isExpired ? `Token expired at ${new Date(payload.exp * 1000).toISOString()}` : 'Token is not expired' },
         { name: 'Revocation', passed: !isRevoked, message: isRevoked ? 'Token has been revoked' : 'Token is not revoked' },
-        { name: 'Legal Grounding', passed: !!payload.leg, message: payload.leg ? 'Legal basis present' : 'Missing legal grounding claim' },
-        { name: 'Constraints', passed: true, message: payload.con ? 'Constraints defined' : 'No constraints (unrestricted)' },
+        { name: 'Legal Grounding', passed: hasLegalGrounding, message: hasLegalGrounding ? 'Legal basis present' : 'Missing or empty legal grounding claim' },
+        { name: 'Constraints', passed: true, message: hasConstraints ? 'Constraints defined' : 'No constraints (unrestricted)' },
         { name: 'Issuer', passed: !!payload.iss, message: payload.iss ? `Issued by ${payload.iss}` : 'Missing issuer claim' },
       ];
 
@@ -372,4 +381,3 @@ export async function verifyPoa(token: string, action?: string): Promise<PoaVeri
   });
   return res.json();
 }
-
