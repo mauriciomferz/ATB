@@ -83,7 +83,7 @@ jobs:
 
       - name: Extract metadata for broker
         id: meta-broker
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/broker
           tags: |
@@ -105,7 +105,7 @@ jobs:
 
       - name: Extract metadata for agentauth
         id: meta-agentauth
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/agentauth
           tags: |
