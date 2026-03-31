@@ -20,7 +20,7 @@ ATB provides a **single enforcement boundary** between AI agent platforms and en
 
 ```
 ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│  Agent Platform │──────▶│   ATB Broker    │──────▶│ Enterprise APIs │
+│  Agent Platform │─────▶│   ATB Broker     │─────▶│ Enterprise APIs │
 │  (Claude, GPT)  │ mTLS  │  (Enforcement)  │ mTLS  │ (SAP, SF, etc.) │
 └─────────────────┘       └────────┬────────┘       └─────────────────┘
                                    │
