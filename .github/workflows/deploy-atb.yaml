@@ -121,7 +121,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push broker
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: atb-gateway-go
           file: atb-gateway-go/Dockerfile.broker
@@ -133,7 +133,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/atb-broker:${{ env.IMAGE_TAG }}
 
       - name: Build and push agentauth
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: atb-gateway-go
           file: atb-gateway-go/Dockerfile.agentauth
